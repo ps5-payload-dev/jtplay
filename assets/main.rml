@@ -1,6 +1,6 @@
 <rml>
 	<head>
-		<title>dlnaplay</title>
+		<title>JTPlay</title>
 		<link type="text/rcss" href="rml.rcss"/>
 		<link type="text/rcss" href="theme.rcss"/>
 		<link type="text/rcss" href="css/layout.rcss"/>
@@ -8,7 +8,7 @@
 		<link type="text/rcss" href="css/watch.rcss"/>
 		<link type="text/rcss" href="css/busy.rcss"/>
 	</head>
-	<body data-model="dlna" data-class-watching="watching">
+	<body data-model="jtplay" data-class-watching="watching">
 
 		<div id="shell">
 			<div id="topbar">

@@ -28,9 +28,7 @@ SystemInterface_SDL::~SystemInterface_SDL() {
 }
 
 void SystemInterface_SDL::JoinPath(Rml::String& translated_path, const Rml::String& document_path, const Rml::String& path) {
-	// Keep Unix-absolute paths intact; the base implementation strips the
-	// leading '/', mangling e.g. "/home/user/.cache/dlnaplay/art.jpg" into
-	// "home/user/.cache/dlnaplay/art.jpg".
+	// Keep Unix-absolute paths intact
 	if (!path.empty() && path[0] == '/') {
 		translated_path = path;
 		return;

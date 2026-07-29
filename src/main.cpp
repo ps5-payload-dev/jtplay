@@ -23,8 +23,8 @@ static void PrintUsage(const char* argv0) {
     "  -p, --plugins DIR  Lua plugin directory\n"
     "                     (default: <assets>/../plugins)\n"
     "  -c, --cache DIR    artwork cache directory\n"
-    "                     (default: $XDG_CACHE_HOME/dlnaplay,\n"
-    "                      i.e. ~/.cache/dlnaplay)\n"
+    "                     (default: $XDG_CACHE_HOME/jtplay,\n"
+    "                      i.e. ~/.cache/jtplay)\n"
     "  -h, --help         show this help\n",
     argv0);
 }
@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
   std::string err;
   App app;
 
-  if (!Backend::Initialize("dlnaplay", SCREEN_WIDTH, SCREEN_HEIGHT, false)) {
+  if (!Backend::Initialize("jtplay", SCREEN_WIDTH, SCREEN_HEIGHT, false)) {
     return -1;
   }
 

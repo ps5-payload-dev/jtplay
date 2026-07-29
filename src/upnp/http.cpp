@@ -190,7 +190,7 @@ bool HttpRequest(const std::string& method, const std::string& url,
 
 	std::string req = method + " " + u.path + " HTTP/1.1\r\n";
 	req += "Host: " + u.host + ":" + std::to_string(u.port) + "\r\n";
-	req += "User-Agent: Linux/1.0 UPnP/1.0 dlnaplay/1.0\r\n";
+	req += "User-Agent: Linux/1.0 UPnP/1.0 jtplay/1.0\r\n";
 	req += "Connection: close\r\n";
 	if (!body.empty())
 		req += "Content-Length: " + std::to_string(body.size()) + "\r\n";

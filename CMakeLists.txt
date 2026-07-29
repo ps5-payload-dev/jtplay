@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(dlnaplay)
+project(jtplay)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,7 +17,7 @@ pkg_check_modules(SDL2_IMAGE REQUIRED IMPORTED_TARGET SDL2_image)
 pkg_check_modules(TINYXML2 REQUIRED IMPORTED_TARGET tinyxml2)
 pkg_check_modules(LUA REQUIRED IMPORTED_TARGET luajit)
 
-add_executable(dlnaplay
+add_executable(jtplay
     src/main.cpp
     src/app.cpp
     src/app_browse.cpp
@@ -35,11 +35,11 @@ add_executable(dlnaplay
     src/RmlUi/Platform_SDL.cpp
 )
 
-target_include_directories(dlnaplay PRIVATE src)
+target_include_directories(jtplay PRIVATE src)
 
-target_compile_options(dlnaplay PRIVATE -Wall -Werror)
+target_compile_options(jtplay PRIVATE -Wall -Werror)
 
-target_link_libraries(dlnaplay PRIVATE
+target_link_libraries(jtplay PRIVATE
     SDL2::SDL2
     SDL2::SDL2main
     RmlUi::Core

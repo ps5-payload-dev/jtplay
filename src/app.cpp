@@ -56,7 +56,7 @@ bool App::Initialize(Rml::Context* context, const Options& options, std::string&
       : (std::getenv("HOME") ? std::string(std::getenv("HOME")) + "/.cache"
                              : std::string("/tmp"));
     ::mkdir(dir.c_str(), 0755);
-    dir += "/dlnaplay";
+    dir += "/jtplay";
     if (::mkdir(dir.c_str(), 0755) == 0 || errno == EEXIST)
       art_dir_ = dir;
   }
@@ -132,7 +132,7 @@ void App::WorkerMain() {
 // ---------------------------------------------------------------------------
 
 bool App::SetupDataModel(Rml::Context* context, std::string& error) {
-  Rml::DataModelConstructor ctor = context->CreateDataModel("dlna");
+  Rml::DataModelConstructor ctor = context->CreateDataModel("jtplay");
   if (!ctor) {
     error = "failed to create data model";
     return false;
