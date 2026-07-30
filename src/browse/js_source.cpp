@@ -324,7 +324,7 @@ namespace browse {
       return;
     }
     JS_SetContextOpaque(ctx, this);
-    http_ = std::make_unique<HttpClient>();
+    http_ = std::make_unique<net::HttpClient>();
     InstallConsole(ctx);
     InstallHttp(ctx);
 

@@ -86,8 +86,8 @@
 						<span class="eyebrow">Details</span>
 					</div>
 					<div class="detail-body" data-if="detail_description != '' || detail_image != ''">
-						<img class="detail-art" data-if="detail_image != ''" data-attr-src="detail_image"/>
 						<div class="detail-desc" data-if="detail_description != ''">{{detail_description}}</div>
+						<img class="detail-art" data-if="detail_image != ''" data-attr-src="detail_image"/>
 					</div>
 				</div>
 			</div>

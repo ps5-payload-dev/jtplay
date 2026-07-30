@@ -12,10 +12,10 @@
 
 #include "app.h"
 #include "app_internal.h"
+#include "artcache.h"
 #include "browse/dlna_source.h"
 #include "browse/fs_source.h"
 #include "browse/js_source.h"
-#include "upnp/http.h"
 
 using namespace appdetail;
 
@@ -42,24 +42,21 @@ bool App::Initialize(Rml::Context* context, const Options& options, std::string&
   if (!player_->Initialize(error))
     return false;
 
-  // Artwork cache directory; if it can't be created, art is simply skipped.
-  if (!options.cache_dir.empty()) {
-    if (::mkdir(options.cache_dir.c_str(), 0755) == 0 || errno == EEXIST)
-      image_dir_ = options.cache_dir;
-    else
-      Rml::Log::Message(Rml::Log::LT_WARNING,
-        "Cannot create cache directory '%s' (%s); artwork disabled",
-        options.cache_dir.c_str(), std::strerror(errno));
-  } else {
+  // Artwork cache; if the directory can't be used, remote art is simply
+  // skipped and local art still works.
+  std::string cache_dir = options.cache_dir;
+  if (cache_dir.empty()) {
     const char* base = std::getenv("XDG_CACHE_HOME");
-    std::string dir = (base && *base) ? std::string(base)
+    cache_dir = (base && *base) ? std::string(base)
       : (std::getenv("HOME") ? std::string(std::getenv("HOME")) + "/.cache"
                              : std::string("/tmp"));
-    ::mkdir(dir.c_str(), 0755);
-    dir += "/jtplay";
-    if (::mkdir(dir.c_str(), 0755) == 0 || errno == EEXIST)
-      image_dir_ = dir;
+    ::mkdir(cache_dir.c_str(), 0755); // the parent; artcache makes the leaf
+    cache_dir += "/jtplay";
   }
+  if (!artcache::Initialize(cache_dir))
+    Rml::Log::Message(Rml::Log::LT_WARNING,
+      "Cannot use cache directory '%s' (%s); remote artwork disabled",
+      cache_dir.c_str(), std::strerror(errno));
 
   providers_.push_back(std::make_unique<browse::FsProvider>());
   providers_.push_back(std::make_unique<browse::DlnaProvider>(kDiscoveryWaitMs));
@@ -85,6 +82,8 @@ void App::Shutdown() {
     if (worker_.joinable())
       worker_.join();
   }
+
+  artcache::Shutdown(); // after the worker is joined; it calls Fetch()
 
   if (player_) {
     player_->Stop();
@@ -311,10 +310,10 @@ void App::Update() {
     }
 
     if (!pending_.images.empty()) {
-      for (auto& done : pending_.images) {
-        image_paths_[done.first] = done.second;
-        image_inflight_.erase(done.first);
-      }
+      // The result itself already sits in artcache; all the UI has to do is
+      // stop treating the URI as in flight and ask again.
+      for (const std::string& uri : pending_.images)
+        image_inflight_.erase(uri);
       pending_.images.clear();
       RefreshImageBindings();
     }
@@ -421,86 +420,27 @@ void App::ProcessEvent(Rml::Event& event) {
 // Artwork
 // ---------------------------------------------------------------------------
 
-namespace {
-
-// Tiny FNV-1a, good enough to key cache filenames by URL.
-uint64_t HashUrl(const std::string& s) {
-  uint64_t h = 1469598103934665603ull;
-  for (unsigned char c : s) {
-    h ^= c;
-    h *= 1099511628211ull;
-  }
-  return h;
-}
-
-// SDL_image picks the decoder from the extension we store under, so sniff
-// the actual bytes rather than trusting the server's Content-Type.
-const char* SniffImageExt(const std::string& b) {
-  if (b.size() >= 3 && (unsigned char)b[0] == 0xff && (unsigned char)b[1] == 0xd8)
-    return "jpg";
-  if (b.size() >= 8 && b.compare(0, 4, "\x89PNG") == 0)
-    return "png";
-  if (b.size() >= 6 && (b.compare(0, 6, "GIF87a") == 0 || b.compare(0, 6, "GIF89a") == 0))
-    return "gif";
-  if (b.size() >= 2 && b[0] == 'B' && b[1] == 'M')
-    return "bmp";
-  if (b.size() >= 12 && b.compare(8, 4, "WEBP") == 0)
-    return "webp";
-  return nullptr;
-}
-
-constexpr size_t kMaxImageBytes = 12 * 1024 * 1024;
-
-} // namespace
-
 std::string App::ImagePathFor(const std::string& uri) {
-  if (uri.empty())
+  // artcache answers for a local file or an already-cached download without
+  // any I/O; everything else has to go to the worker, because RmlUi wants a
+  // path now and the download is a blocking request.
+  std::string path;
+  switch (artcache::Lookup(uri, path)) {
+  case artcache::Status::Ready:
+    return path;
+  case artcache::Status::Failed:
     return {};
-
-  // Local artwork needs no download; RmlUi loads it through the file
-  // interface directly. Both "file:///path" and a bare "/path" are taken.
-  if (uri.compare(0, 7, "file://") == 0)
-    return uri.substr(7);
-  if (uri[0] == '/')
-    return uri;
-
-  if (image_dir_.empty())
-    return {};
-
-  auto it = image_paths_.find(uri);
-  if (it != image_paths_.end())
-    return it->second; // may be "" if the download failed; don't retry
+  case artcache::Status::Missing:
+    break;
+  }
 
   if (!image_inflight_.insert(uri).second)
-    return {};
+    return {}; // already being fetched; the next Refresh picks it up
 
-  const std::string dir = image_dir_;
-  PostTask([this, uri, dir]() {
-    std::string path; // stays empty on failure
-
-    upnp::HttpResponse resp;
-    std::string error;
-    if (upnp::HttpGet(uri, resp, error) && resp.status == 200 &&
-        !resp.body.empty() && resp.body.size() <= kMaxImageBytes) {
-      if (const char* ext = SniffImageExt(resp.body)) {
-        char name[64];
-        std::snprintf(name, sizeof(name), "/art-%016llx.%s",
-                      (unsigned long long)HashUrl(uri), ext);
-        const std::string full = dir + name;
-        if (FILE* f = std::fopen(full.c_str(), "wb")) {
-          const bool ok =
-            std::fwrite(resp.body.data(), 1, resp.body.size(), f) == resp.body.size();
-          std::fclose(f);
-          if (ok)
-            path = full;
-          else
-            std::remove(full.c_str());
-        }
-      }
-    }
-
+  PostTask([this, uri] {
+    artcache::Fetch(uri); // the cache holds the result; we only signal
     std::lock_guard<std::mutex> lock(pending_.mutex);
-    pending_.images.emplace_back(uri, path);
+    pending_.images.push_back(uri);
   });
 
   return {};

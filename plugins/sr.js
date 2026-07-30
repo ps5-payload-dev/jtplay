@@ -14,7 +14,7 @@ function fetchChannels() {
 	type: "audio",
 	name: ch.name,
 	description: ch.tagline,
-	image: ch.imagetemplate,
+	image: ch.image,
 	uri: ch.liveaudio.url
     }));
 }

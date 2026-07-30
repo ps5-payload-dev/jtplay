@@ -24,12 +24,14 @@ add_executable(jtplay
     src/app.cpp
     src/app_browse.cpp
     src/app_watch.cpp
+    src/artcache.cpp
     src/player.cpp
     src/visualizer.cpp
     src/browse/dlna_source.cpp
     src/browse/fs_source.cpp
     src/browse/js_http.cpp
     src/browse/js_source.cpp
+    src/net/http_client.cpp
     src/upnp/http.cpp
     src/upnp/ssdp.cpp
     src/upnp/dlna.cpp

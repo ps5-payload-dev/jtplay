@@ -9,10 +9,9 @@
 #include <quickjs.h>
 
 #include "browse/source.h"
+#include "net/http_client.h"
 
 namespace browse {
-
-  class HttpClient;
 
   // One loaded plugin script: owns the QuickJS runtime and the provider
   // object the script returned. Shared by the provider and every source it
@@ -46,7 +45,7 @@ namespace browse {
     void ExtendDeadline(std::chrono::steady_clock::duration by);
 
     // The plugin's HTTP client; null if libcurl could not be initialized.
-    HttpClient* Http() const { return http_.get(); }
+    net::HttpClient* Http() const { return http_.get(); }
 
     std::mutex mutex;         // serializes all runtime access
     JSRuntime* rt = nullptr;
@@ -56,7 +55,7 @@ namespace browse {
   private:
     static int InterruptHandler(JSRuntime* rt, void* opaque);
 
-    std::unique_ptr<HttpClient> http_;
+    std::unique_ptr<net::HttpClient> http_;
     std::chrono::steady_clock::time_point deadline_;
     bool armed_ = false;
     std::string name_;        // provider name (falls back to the file name)

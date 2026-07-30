@@ -2,9 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstdlib>
 #include <chrono>
-#include <mutex>
 
 #include "browse/js_http.h"
 #include "browse/js_source.h"
@@ -16,57 +14,7 @@ namespace browse {
     // mistake, and the body is held outside the JS heap so the runtime's
     // own memory limit would not catch it.
     constexpr size_t kMaxResponseBytes = 8u << 20;
-    constexpr long kConnectTimeoutMs = 10000;
     constexpr long kMaxTimeoutMs = 60000;
-
-    struct Sink {
-      std::string data;
-      bool overflow = false;
-    };
-
-    size_t WriteBody(char* ptr, size_t size, size_t nmemb, void* userdata) {
-      Sink* sink = static_cast<Sink*>(userdata);
-      const size_t n = size * nmemb;
-      if (sink->data.size() + n > kMaxResponseBytes) {
-	sink->overflow = true;
-	return 0; // aborts the transfer with CURLE_WRITE_ERROR
-      }
-      sink->data.append(ptr, n);
-      return n;
-    }
-
-    size_t WriteHeader(char* ptr, size_t size, size_t nmemb, void* userdata) {
-      auto* headers =
-	static_cast<std::map<std::string, std::string>*>(userdata);
-      const size_t n = size * nmemb;
-      std::string line(ptr, n);
-      while (!line.empty() && (line.back() == '\r' || line.back() == '\n'))
-	line.pop_back();
-
-      // A new status line means a redirect; the headers seen so far belong
-      // to the response we are not returning.
-      if (line.compare(0, 5, "HTTP/") == 0) {
-	headers->clear();
-	return n;
-      }
-      const size_t colon = line.find(':');
-      if (colon == std::string::npos)
-	return n;
-
-      std::string key = line.substr(0, colon);
-      std::transform(key.begin(), key.end(), key.begin(),
-		     [](unsigned char c) { return std::tolower(c); });
-      size_t begin = line.find_first_not_of(" \t", colon + 1);
-      std::string value =
-	begin == std::string::npos ? std::string() : line.substr(begin);
-
-      auto it = headers->find(key);
-      if (it == headers->end())
-	(*headers)[key] = std::move(value);
-      else
-	it->second += ", " + value; // repeated header (Set-Cookie, Link, ...)
-      return n;
-    }
 
     JsPlugin* PluginFor(JSContext* ctx) {
       return static_cast<JsPlugin*>(JS_GetContextOpaque(ctx));
@@ -92,7 +40,7 @@ namespace browse {
 
     // Copies the {name: value} object at 'headers' into the request.
     bool ReadHeaders(JSContext* ctx, JSValue headers,
-		     HttpClient::Request& req) {
+		     net::HttpClient::Request& req) {
       JSPropertyEnum* props = nullptr;
       uint32_t count = 0;
       if (JS_GetOwnPropertyNames(ctx, &props, &count, headers,
@@ -118,7 +66,7 @@ namespace browse {
 
     // Reads the options object shared by request()/get()/post().
     bool ReadOptions(JSContext* ctx, JSValue options,
-		     HttpClient::Request& req, bool& binary) {
+		     net::HttpClient::Request& req, bool& binary) {
       if (JS_IsUndefined(options) || JS_IsNull(options))
 	return true;
       if (!JS_IsObject(options)) {
@@ -156,7 +104,7 @@ namespace browse {
       return true;
     }
 
-    JSValue BuildResponse(JSContext* ctx, const HttpClient::Response& res,
+    JSValue BuildResponse(JSContext* ctx, const net::HttpClient::Response& res,
 			  bool binary) {
       JSValue out = JS_NewObject(ctx);
       JS_SetPropertyStr(ctx, out, "status", JS_NewInt32(ctx, (int)res.status));
@@ -186,13 +134,15 @@ namespace browse {
       return out;
     }
 
-    JSValue Perform(JSContext* ctx, HttpClient::Request& req, bool binary) {
+    JSValue Perform(JSContext* ctx, net::HttpClient::Request& req, bool binary) {
       JsPlugin* plugin = PluginFor(ctx);
-      HttpClient* client = plugin ? plugin->Http() : nullptr;
+      net::HttpClient* client = plugin ? plugin->Http() : nullptr;
       if (!client)
 	return ThrowError(ctx, "http: client unavailable");
 
-      HttpClient::Response res;
+      req.max_bytes = kMaxResponseBytes;
+
+      net::HttpClient::Response res;
       std::string error;
 
       // Time spent blocked in libcurl is not script time; without this the
@@ -214,7 +164,7 @@ namespace browse {
 	return JS_ThrowTypeError(ctx, "http.request: expected an options "
 				 "object");
 
-      HttpClient::Request req;
+      net::HttpClient::Request req;
       bool binary = false;
 
       JSValue url = JS_GetPropertyStr(ctx, argv[0], "url");
@@ -251,7 +201,7 @@ namespace browse {
     JSValue HttpGet(JSContext* ctx, JSValue this_val, int argc,
 		    JSValue* argv) {
       (void)this_val;
-      HttpClient::Request req;
+      net::HttpClient::Request req;
       bool binary = false;
       if (argc < 1 || !JS_IsString(argv[0]) || !StringArg(ctx, argv[0], req.url))
 	return JS_ThrowTypeError(ctx, "http.get: expected a url string");
@@ -264,7 +214,7 @@ namespace browse {
     JSValue HttpPost(JSContext* ctx, JSValue this_val, int argc,
 		     JSValue* argv) {
       (void)this_val;
-      HttpClient::Request req;
+      net::HttpClient::Request req;
       req.method = "POST";
       bool binary = false;
       if (argc < 1 || !JS_IsString(argv[0]) || !StringArg(ctx, argv[0], req.url))
@@ -279,108 +229,6 @@ namespace browse {
       return Perform(ctx, req, binary);
     }
 
-    std::once_flag g_curl_init;
-  }
-
-  HttpClient::HttpClient() {
-    std::call_once(g_curl_init, [] { ::curl_global_init(CURL_GLOBAL_DEFAULT); });
-    curl_ = ::curl_easy_init();
-  }
-
-  HttpClient::~HttpClient() {
-    if (curl_)
-      ::curl_easy_cleanup(curl_);
-  }
-
-  bool HttpClient::Perform(const Request& req, Response& res,
-			   std::string& error) {
-    if (!curl_) {
-      error = "http: curl unavailable";
-      return false;
-    }
-    ::curl_easy_reset(curl_); // keeps the connection cache, drops old options
-
-    Sink sink;
-    char message[CURL_ERROR_SIZE] = {0};
-
-    ::curl_easy_setopt(curl_, CURLOPT_URL, req.url.c_str());
-    ::curl_easy_setopt(curl_, CURLOPT_ERRORBUFFER, message);
-    ::curl_easy_setopt(curl_, CURLOPT_WRITEFUNCTION, WriteBody);
-    ::curl_easy_setopt(curl_, CURLOPT_WRITEDATA, &sink);
-    ::curl_easy_setopt(curl_, CURLOPT_HEADERFUNCTION, WriteHeader);
-    ::curl_easy_setopt(curl_, CURLOPT_HEADERDATA, &res.headers);
-    ::curl_easy_setopt(curl_, CURLOPT_USERAGENT, "jtplay");
-    ::curl_easy_setopt(curl_, CURLOPT_ACCEPT_ENCODING, ""); // gzip if built in
-    ::curl_easy_setopt(curl_, CURLOPT_FOLLOWLOCATION,
-		       req.follow_redirects ? 1L : 0L);
-    ::curl_easy_setopt(curl_, CURLOPT_MAXREDIRS, 5L);
-    ::curl_easy_setopt(curl_, CURLOPT_TIMEOUT_MS, req.timeout_ms);
-    ::curl_easy_setopt(curl_, CURLOPT_CONNECTTIMEOUT_MS, kConnectTimeoutMs);
-    // The worker thread must not be hit by libcurl's signal-based timeouts.
-    ::curl_easy_setopt(curl_, CURLOPT_NOSIGNAL, 1L);
-
-    // A plugin has no business opening file:// or scp:// URLs.
-#if LIBCURL_VERSION_NUM >= 0x075500
-    ::curl_easy_setopt(curl_, CURLOPT_PROTOCOLS_STR, "http,https");
-    ::curl_easy_setopt(curl_, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
-#else
-    ::curl_easy_setopt(curl_, CURLOPT_PROTOCOLS,
-		       (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
-    ::curl_easy_setopt(curl_, CURLOPT_REDIR_PROTOCOLS,
-		       (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
-#endif
-
-    // Builds without a baked-in CA bundle (the PS5 toolchain among them)
-    // need to be told where the certificates live.
-    for (const char* name : {"SSL_CERT_FILE", "CURL_CA_BUNDLE"}) {
-      if (const char* path = ::getenv(name)) {
-	if (*path) {
-	  ::curl_easy_setopt(curl_, CURLOPT_CAINFO, path);
-	  break;
-	}
-      }
-    }
-
-    if (req.method == "GET") {
-      ::curl_easy_setopt(curl_, CURLOPT_HTTPGET, 1L);
-    } else if (req.method == "HEAD") {
-      ::curl_easy_setopt(curl_, CURLOPT_NOBODY, 1L);
-    } else {
-      ::curl_easy_setopt(curl_, CURLOPT_CUSTOMREQUEST, req.method.c_str());
-    }
-    if (req.has_body) {
-      ::curl_easy_setopt(curl_, CURLOPT_POSTFIELDSIZE_LARGE,
-			 (curl_off_t)req.body.size());
-      ::curl_easy_setopt(curl_, CURLOPT_COPYPOSTFIELDS, req.body.data());
-    }
-
-    struct curl_slist* headers = nullptr;
-    for (const auto& header : req.headers)
-      headers = ::curl_slist_append(headers,
-				    (header.first + ": " + header.second).c_str());
-    if (headers)
-      ::curl_easy_setopt(curl_, CURLOPT_HTTPHEADER, headers);
-
-    const CURLcode code = ::curl_easy_perform(curl_);
-    if (headers)
-      ::curl_slist_free_all(headers);
-
-    if (code != CURLE_OK) {
-      if (sink.overflow)
-	error = "http: response larger than " +
-	  std::to_string(kMaxResponseBytes / (1024 * 1024)) + " MiB";
-      else
-	error = std::string("http: ") +
-	  (message[0] ? message : ::curl_easy_strerror(code));
-      return false;
-    }
-
-    ::curl_easy_getinfo(curl_, CURLINFO_RESPONSE_CODE, &res.status);
-    const char* final_url = nullptr;
-    ::curl_easy_getinfo(curl_, CURLINFO_EFFECTIVE_URL, &final_url);
-    res.url = final_url ? final_url : req.url;
-    res.body = std::move(sink.data);
-    return true;
   }
 
   void InstallHttp(JSContext* ctx) {

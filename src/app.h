@@ -126,8 +126,8 @@ private:
   // --- Artwork -----------------------------------------------------------
   // Entry::image is a URI: file:// (or a bare path) for local artwork,
   // http(s):// for remote. RmlUi only loads textures through the file
-  // interface, so local ones are bound directly and the worker downloads
-  // each remote one into a small on-disk cache that the UI then binds.
+  // interface, so everything has to end up as a local path; artcache is
+  // where that happens, for every source alike.
   // Returns the displayable path, or "" while a download is (or has been
   // scheduled to be) fetched in the background, or if it failed.
   std::string ImagePathFor(const std::string& uri);
@@ -206,14 +206,13 @@ private:
     bool play_ready = false;
     bool play_ok = false;
     std::string play_error;
-    // image uri -> cached local path ("" = download failed)
-    std::vector<std::pair<std::string, std::string>> images;
+    // image uris whose fetch has finished; the paths live in artcache
+    std::vector<std::string> images;
   };
   Pending pending_;
 
-  // Artwork cache (main thread).
-  std::string image_dir_;                          // "" = cache unavailable
-  std::map<std::string, std::string> image_paths_; // uri -> path ("" = failed)
+  // Artwork (main thread). The cache itself is artcache; this is only the
+  // set of URIs a worker task is already fetching, so the UI asks once.
   std::set<std::string> image_inflight_;
   uint32_t browse_request_ = 0;     // id of the browse we are waiting for
   std::atomic<int> busy_ops_{0};
