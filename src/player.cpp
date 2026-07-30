@@ -213,6 +213,65 @@ void Player::SetStatus(const std::string& text)
 // Input (libavformat over HTTP)
 // ---------------------------------------------------------------------------
 
+// Enumerates the selectable video and audio streams of the open container.
+// The label is built from the stream metadata (language, title) plus the
+// codec and, depending on the kind, the channel layout or the frame size:
+// "eng · ac3 5.1(side)", "Commentary · aac stereo", "h264 1920x1080".
+void Player::CollectTracks()
+{
+	std::lock_guard<std::mutex> lock(tracks_mutex_);
+	video_tracks_.clear();
+	audio_tracks_.clear();
+
+	for (unsigned i = 0; fmt_ && i < fmt_->nb_streams; i++)
+	{
+		const AVStream* st = fmt_->streams[i];
+		const AVMediaType type = st->codecpar->codec_type;
+		if (type != AVMEDIA_TYPE_VIDEO && type != AVMEDIA_TYPE_AUDIO)
+			continue;
+		// Cover art is a video stream in name only; not selectable.
+		if (type == AVMEDIA_TYPE_VIDEO && (st->disposition & AV_DISPOSITION_ATTACHED_PIC))
+			continue;
+
+		std::string label;
+		auto append = [&label](const std::string& part) {
+			if (part.empty())
+				return;
+			label += (label.empty() ? "" : " · ") + part;
+		};
+		const AVDictionaryEntry* lang = av_dict_get(st->metadata, "language", nullptr, 0);
+		if (lang && lang->value[0] && std::strcmp(lang->value, "und") != 0)
+			append(lang->value);
+		const AVDictionaryEntry* title = av_dict_get(st->metadata, "title", nullptr, 0);
+		if (title && title->value[0])
+			append(title->value);
+
+		std::string codec = avcodec_get_name(st->codecpar->codec_id);
+		if (type == AVMEDIA_TYPE_AUDIO)
+		{
+			char layout[64];
+			if (av_channel_layout_describe(&st->codecpar->ch_layout, layout, sizeof(layout)) > 0)
+				codec += std::string(" ") + layout;
+		}
+		else if (st->codecpar->width > 0 && st->codecpar->height > 0)
+		{
+			codec += " " + std::to_string(st->codecpar->width) + "x" +
+				std::to_string(st->codecpar->height);
+		}
+		append(codec);
+
+		std::vector<TrackInfo>& into =
+			(type == AVMEDIA_TYPE_AUDIO) ? audio_tracks_ : video_tracks_;
+		TrackInfo t;
+		t.stream_index = (int)i;
+		t.label = label.empty() ? "Track " + std::to_string(into.size() + 1) : label;
+		into.push_back(std::move(t));
+	}
+
+	vtrack_count_ = (int)video_tracks_.size();
+	track_count_ = (int)audio_tracks_.size();
+}
+
 bool Player::OpenInput(const std::string& url, std::string& error)
 {
 	CloseInput();
@@ -260,52 +319,18 @@ bool Player::OpenInput(const std::string& url, std::string& error)
 		return false;
 	}
 
-	// Collect the selectable audio tracks. The label is built from the
-	// stream metadata (language, title) plus the codec and channel layout,
-	// so "eng · ac3 5.1(side)" or "Commentary · aac stereo".
-	{
-		std::lock_guard<std::mutex> lock(tracks_mutex_);
-		audio_tracks_.clear();
-		for (unsigned i = 0; i < fmt_->nb_streams; i++)
-		{
-			const AVStream* st = fmt_->streams[i];
-			if (st->codecpar->codec_type != AVMEDIA_TYPE_AUDIO)
-				continue;
-
-			std::string label;
-			auto append = [&label](const std::string& part) {
-				if (part.empty())
-					return;
-				label += (label.empty() ? "" : " · ") + part;
-			};
-			const AVDictionaryEntry* lang = av_dict_get(st->metadata, "language", nullptr, 0);
-			if (lang && lang->value[0] && std::strcmp(lang->value, "und") != 0)
-				append(lang->value);
-			const AVDictionaryEntry* title = av_dict_get(st->metadata, "title", nullptr, 0);
-			if (title && title->value[0])
-				append(title->value);
-
-			std::string codec = avcodec_get_name(st->codecpar->codec_id);
-			char layout[64];
-			if (av_channel_layout_describe(&st->codecpar->ch_layout, layout, sizeof(layout)) > 0)
-				codec += std::string(" ") + layout;
-			append(codec);
-
-			AudioTrackInfo t;
-			t.stream_index = (int)i;
-			t.label = label.empty()
-				? "Track " + std::to_string(audio_tracks_.size() + 1) : label;
-			audio_tracks_.push_back(std::move(t));
-		}
-		track_count_ = (int)audio_tracks_.size();
-	}
+	CollectTracks();
 
 	// Cover art in audio files shows up as an attached-picture video stream;
-	// decoding it as a movie makes no sense, so drop it here. The UI shows
-	// the DIDL album art instead.
+	// decoding it as a movie makes no sense, so drop it here. A file can
+	// carry both, so fall back to a real video track before giving up on
+	// video entirely. The UI shows the DIDL album art instead.
 	if (video_stream_ >= 0 &&
 	    (fmt_->streams[video_stream_]->disposition & AV_DISPOSITION_ATTACHED_PIC))
-		video_stream_ = -1;
+	{
+		std::lock_guard<std::mutex> lock(tracks_mutex_);
+		video_stream_ = video_tracks_.empty() ? -1 : video_tracks_.front().stream_index;
+	}
 
 	// Decoders are opened straight from the container's stream parameters.
 	std::string desc;
@@ -369,9 +394,12 @@ void Player::CloseInput()
 		avformat_close_input(&fmt_); // also frees fmt_
 	{
 		std::lock_guard<std::mutex> lock(tracks_mutex_);
+		video_tracks_.clear();
 		audio_tracks_.clear();
 	}
+	vtrack_count_ = 0;
 	track_count_ = 0;
+	video_switch_target_ = -1;
 	audio_switch_target_ = -1;
 	video_stream_ = audio_stream_ = -1;
 	file_start_us_ = 0;
@@ -427,6 +455,29 @@ void Player::DemuxThread()
 
 	while (threads_running_)
 	{
+		// Pending video track switch: same shape as the audio one below.
+		// The frame queue is dropped as well, otherwise frames decoded
+		// from the old stream would be presented after the switch, and
+		// the wall clock is unanchored because the new track's first
+		// frame re-establishes it when there is no audio to follow.
+		const int vswitch_to = video_switch_target_.exchange(-1);
+		if (vswitch_to >= 0 && vswitch_to != video_stream_.load())
+		{
+			const int64_t pos = PositionUs();
+			video_stream_ = vswitch_to;
+			vqueue_.Clear(); // epoch bump: the video thread drops its tail
+			DropDecodedFrames();
+			if (audio_stream_.load() < 0)
+				wall_anchor_pts_ = INT64_MIN;
+			if (pos >= 0)
+			{
+				last_position_us_ = pos;
+				if (seekable_)
+					seek_target_us_ = pos;
+			}
+			continue;
+		}
+
 		// Pending audio track switch: retarget which stream is queued and
 		// flush the audio side; the decode thread rebuilds its decoder when
 		// it sees packets from the new stream. When the file is seekable,
@@ -571,10 +622,59 @@ bool Player::TogglePause()
 	return paused_;
 }
 
+std::vector<VideoTrackInfo> Player::VideoTracks() const
+{
+	std::lock_guard<std::mutex> lock(tracks_mutex_);
+	return video_tracks_;
+}
+
 std::vector<AudioTrackInfo> Player::AudioTracks() const
 {
 	std::lock_guard<std::mutex> lock(tracks_mutex_);
 	return audio_tracks_;
+}
+
+// Label lookups: the same walk the UI would do, but under the one lock, so
+// the caller cannot see a track list from a file that has since closed.
+std::string Player::CurrentVideoLabel() const
+{
+	const int cur = video_stream_.load();
+	std::lock_guard<std::mutex> lock(tracks_mutex_);
+	for (const VideoTrackInfo& t : video_tracks_)
+		if (t.stream_index == cur)
+			return t.label;
+	return {};
+}
+
+std::string Player::CurrentAudioLabel() const
+{
+	const int cur = audio_stream_.load();
+	std::lock_guard<std::mutex> lock(tracks_mutex_);
+	for (const AudioTrackInfo& t : audio_tracks_)
+		if (t.stream_index == cur)
+			return t.label;
+	return {};
+}
+
+bool Player::SelectVideoTrack(int stream_index)
+{
+	// Only meaningful while a video pipeline is running; an audio-only
+	// file (or one whose video decoder failed to open) has no thread to
+	// feed the packets to.
+	if (!active_ || video_stream_.load() < 0)
+		return false;
+	if (stream_index == video_stream_.load())
+		return false;
+	{
+		std::lock_guard<std::mutex> lock(tracks_mutex_);
+		bool known = false;
+		for (const VideoTrackInfo& t : video_tracks_)
+			known = known || t.stream_index == stream_index;
+		if (!known)
+			return false;
+	}
+	video_switch_target_ = stream_index;
+	return true;
 }
 
 bool Player::SelectAudioTrack(int stream_index)
@@ -788,6 +888,13 @@ void Player::VideoThread()
 	uint32_t epoch = 0;
 	bool have_epoch = false;
 
+	int ctx_stream = video_stream_.load(); // stream vctx_ was opened for
+	// After a track switch the first packets are usually mid-GOP, and
+	// feeding those to a fresh decoder yields nothing but green mush.
+	// Wait for a keyframe, but not forever: a container that does not flag
+	// them would otherwise stall the picture for good.
+	int skip_budget = 0;
+
 	DemuxPacket in;
 	uint32_t pkt_epoch = 0;
 	while (vqueue_.Pop(in, threads_running_, &pkt_epoch))
@@ -802,6 +909,23 @@ void Player::VideoThread()
 		{
 			epoch = pkt_epoch;
 			avcodec_flush_buffers(vctx_);
+		}
+
+		// Track switch: the demuxer now queues a different stream, so the
+		// decoder has to be rebuilt for it. On failure the packet is
+		// dropped and the reopen retried on the next one.
+		if ((int)in.stream != ctx_stream)
+		{
+			if (!ReopenVideoDecoder((int)in.stream))
+				continue;
+			ctx_stream = (int)in.stream;
+			skip_budget = 120;
+		}
+		if (skip_budget > 0)
+		{
+			if (in.frametype != 'I' && --skip_budget > 0)
+				continue;
+			skip_budget = 0;
 		}
 
 		av_new_packet(pkt, (int)in.payload.size());
@@ -831,6 +955,38 @@ void Player::VideoThread()
 
 	av_frame_free(&frame);
 	av_packet_free(&pkt);
+}
+
+bool Player::ReopenVideoDecoder(int stream_index)
+{
+	if (!fmt_ || stream_index < 0 || stream_index >= (int)fmt_->nb_streams)
+		return false;
+	AVStream* st = fmt_->streams[stream_index];
+	const AVCodec* codec = avcodec_find_decoder(st->codecpar->codec_id);
+	if (!codec)
+		return false;
+	AVCodecContext* ctx = avcodec_alloc_context3(codec);
+	if (!ctx)
+		return false;
+	ctx->thread_count = 0;
+	if (avcodec_parameters_to_context(ctx, st->codecpar) < 0 ||
+	    avcodec_open2(ctx, codec, nullptr) < 0)
+	{
+		avcodec_free_context(&ctx);
+		return false;
+	}
+	ctx->pkt_timebase = st->time_base;
+
+	avcodec_free_context(&vctx_);
+	vctx_ = ctx;
+	// The new track may have a different size or pixel format; the scaler
+	// is rebuilt on the next frame that needs one.
+	if (sws_)
+	{
+		sws_freeContext(sws_);
+		sws_ = nullptr;
+	}
+	return true;
 }
 
 bool Player::ReopenAudioDecoder(int stream_index)

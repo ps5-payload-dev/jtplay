@@ -183,7 +183,10 @@ bool App::SetupDataModel(Rml::Context* context, std::string& error) {
   ctor.Bind("watch_meta", &bind_watch_meta_);
   ctor.Bind("watch_time", &bind_watch_time_);
   ctor.Bind("watch_progress", &bind_watch_progress_);
+  ctor.Bind("watch_vtrack", &bind_watch_vtrack_);
   ctor.Bind("watch_atrack", &bind_watch_atrack_);
+  ctor.Bind("watch_multi_video", &bind_watch_multi_video_);
+  ctor.Bind("watch_multi_audio", &bind_watch_multi_audio_);
   ctor.Bind("detail_art", &bind_detail_art_);
   ctor.Bind("np_art", &bind_np_art_);
 

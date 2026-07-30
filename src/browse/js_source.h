@@ -80,6 +80,12 @@ namespace browse {
     bool Browse(const std::string& id, Listing& out,
 		std::string& error) override;
 
+    // Calls the script's resolve(id, entry) when it has one, so a plugin
+    // serving signed URLs can hand out a fresh one per playback. Without
+    // a resolve function this falls back to Source::Resolve().
+    bool Resolve(const Entry& entry, std::string& url,
+		 std::string& error) override;
+
   private:
     JsPluginPtr plugin_;
     JSValue source_;

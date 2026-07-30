@@ -209,6 +209,57 @@ namespace browse {
       return true;
     }
 
+    const char* KindToString(Entry::Kind kind) {
+      switch (kind) {
+      case Entry::Kind::Folder: return "folder";
+      case Entry::Kind::Audio:  return "audio";
+      case Entry::Kind::Video:  return "video";
+      case Entry::Kind::Image:  return "image";
+      default:                  return "other";
+      }
+    }
+
+    // The mirror of ToEntry(): hands an entry back to the script, so
+    // resolve() can look at more than the bare id.
+    JSValue EntryToJs(JSContext* ctx, const Entry& e) {
+      JSValue obj = JS_NewObject(ctx);
+      if (JS_IsException(obj))
+	return obj;
+
+      auto set_str = [&](const char* key, const std::string& value) {
+	if (!value.empty())
+	  JS_SetPropertyStr(ctx, obj, key,
+			    JS_NewStringLen(ctx, value.data(), value.size()));
+      };
+      set_str("id", e.id);
+      set_str("title", e.title);
+      JS_SetPropertyStr(ctx, obj, "kind", JS_NewString(ctx, KindToString(e.kind)));
+      set_str("url", e.res_url);
+      set_str("artist", e.artist);
+      set_str("album", e.album);
+      set_str("genre", e.genre);
+      set_str("date", e.date);
+      set_str("art", e.art_url);
+      set_str("format", e.format);
+      set_str("resolution", e.resolution);
+      if (e.duration_us >= 0)
+	JS_SetPropertyStr(ctx, obj, "duration",
+			  JS_NewFloat64(ctx, (double)e.duration_us / 1e6));
+      if (e.size_bytes >= 0)
+	JS_SetPropertyStr(ctx, obj, "size", JS_NewInt64(ctx, e.size_bytes));
+      return obj;
+    }
+
+    // True when 'obj' has a callable property 'key'.
+    bool HasFunction(JSContext* ctx, JSValue obj, const char* key) {
+      Ref fn(ctx, JS_GetPropertyStr(ctx, obj, key));
+      if (JS_IsException(fn.get())) {
+	JS_FreeValue(ctx, JS_GetException(ctx));
+	return false;
+      }
+      return JS_IsFunction(ctx, fn.get());
+    }
+
     // Converts the array of entry objects returned by browse().
     bool ToListing(JSContext* ctx, JSValue v, Listing& out,
 		   std::string& error) {
@@ -397,7 +448,67 @@ namespace browse {
       error = TakeException(ctx);
       return false;
     }
-    return ToListing(ctx, result.get(), out, error);
+
+    const size_t first = out.entries.size();
+    if (!ToListing(ctx, result.get(), out, error))
+      return false;
+
+    // A source with a resolve() function can produce a URL for any of its
+    // items later on, so an entry that listed without one is still
+    // playable. Checked per call: the plugin may install resolve() while
+    // it runs.
+    if (HasFunction(ctx, source_, "resolve")) {
+      for (size_t i = first; i < out.entries.size(); i++)
+	if (!out.entries[i].IsFolder())
+	  out.entries[i].resolvable = true;
+    }
+    return true;
+  }
+
+  bool JsSource::Resolve(const Entry& entry, std::string& url,
+			 std::string& error) {
+    std::lock_guard<std::mutex> lock(plugin_->mutex);
+    JSContext* ctx = plugin_->ctx;
+    CallScope scope(*plugin_);
+
+    Ref resolve(ctx, JS_GetPropertyStr(ctx, source_, "resolve"));
+    if (!JS_IsFunction(ctx, resolve.get())) {
+      // No resolve(): the URL from browse() is all there is.
+      url = entry.res_url;
+      if (url.empty()) {
+	error = "this item has no playable resource";
+	return false;
+      }
+      return true;
+    }
+
+    Ref id(ctx, JS_NewStringLen(ctx, entry.id.data(), entry.id.size()));
+    Ref obj(ctx, EntryToJs(ctx, entry));
+    JSValue argv[] = {id.get(), obj.get()};
+    Ref result(ctx, JS_Call(ctx, resolve.get(), source_, 2, argv));
+    if (JS_IsException(result.get())) {
+      error = TakeException(ctx);
+      return false;
+    }
+
+    // Either the URL itself, or an object like the entries browse()
+    // returns, so a plugin can correct the format or the duration at the
+    // same time. Anything else means the plugin gave up on this item.
+    if (IsThenable(ctx, result.get())) {
+      error = "resolve() returned a promise; plugin functions must be "
+	"synchronous";
+      return false;
+    }
+    if (JS_IsString(result.get()))
+      url = ToStdString(ctx, result.get());
+    else if (JS_IsObject(result.get()))
+      url = FieldString(ctx, result.get(), "url");
+
+    if (url.empty()) {
+      error = "resolve() did not return a URL";
+      return false;
+    }
+    return true;
   }
 
   JsProvider::JsProvider(const std::string& path)

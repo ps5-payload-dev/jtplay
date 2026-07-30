@@ -117,6 +117,7 @@ private:
   void HandlePlaybackEnd();
   bool PlayNeighbor(int direction);      // next/previous playable item
   void CycleAudioTrack();                // triangle: next audio track
+  void CycleVideoTrack();                // square: next video track
   void HandleKeyWatch(Rml::Event& event, int key);
 
   void EnsureRowVisible(const char* list_id, int index, float row_pitch);
@@ -154,8 +155,14 @@ private:
   Rml::String bind_watch_meta_;
   Rml::String bind_watch_time_;
   Rml::String bind_watch_progress_ = "0%"; // data-style-width; never empty
-  Rml::String bind_watch_atrack_;  // active audio track label; "" when the
-                                   // file has fewer than two audio tracks
+  // Codec lines shown in the watch bar: the label of the video and audio
+  // track being decoded ("h264 1920x1080", "eng · ac3 5.1(side)"), or ""
+  // when the file has no stream of that kind. The multi_ flags say whether
+  // there is anything to switch to, and gate the button hints.
+  Rml::String bind_watch_vtrack_;
+  Rml::String bind_watch_atrack_;
+  bool bind_watch_multi_video_ = false;
+  bool bind_watch_multi_audio_ = false;
   Rml::String bind_detail_art_;    // local image path, "" = none
   Rml::String bind_np_art_;        // now-playing artwork path, "" = none
 

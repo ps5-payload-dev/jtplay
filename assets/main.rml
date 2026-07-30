@@ -111,7 +111,7 @@
 			<div class="art" data-if="np_art == ''">🎵</div>
 			<div class="np-title">{{watch_title}}</div>
 			<div class="np-meta" data-if="watch_meta != ''">{{watch_meta}}</div>
-			<div class="np-atrack" data-if="watch_atrack != ''"><img class="key-icon" src="icons/triangle.png"/>&nbsp;{{watch_atrack}}</div>
+			<div class="np-atrack" data-if="watch_multi_audio"><img class="key-icon" src="icons/triangle.png"/>&nbsp;{{watch_atrack}}</div>
 			<div class="watch-progress" data-if="watch_seekable">
 				<div class="bar" data-style-width="watch_progress"/>
 			</div>
@@ -124,7 +124,10 @@
 			<img class="watch-thumb" data-if="np_art != ''" data-attr-src="np_art"/>
 			<div class="watch-main">
 				<div class="watch-name">{{watch_title}}</div>
-				<div class="watch-atrack" data-if="watch_atrack != ''">Audio: {{watch_atrack}}</div>
+				<div class="watch-tracks">
+					<span class="watch-track" data-if="watch_vtrack != ''">Video: {{watch_vtrack}}</span>
+					<span class="watch-track" data-if="watch_atrack != ''">Audio: {{watch_atrack}}</span>
+				</div>
 				<div class="watch-progress" data-if="watch_seekable">
 					<div class="bar" data-style-width="watch_progress"/>
 				</div>
@@ -133,10 +136,11 @@
 				<div class="watch-time">{{watch_time}}</div>
 				<div class="watch-hints">
 					<span class="chip" data-if="watch_seekable"><img class="key-icon" src="icons/dpad.png"/>&nbsp;Seek</span>
-					<span class="chip" data-if="watch_atrack != ''"><img class="key-icon" src="icons/triangle.png"/>&nbsp;Audio track</span>
+					<span class="chip" data-if="watch_multi_video"><img class="key-icon" src="icons/square.png"/>&nbsp;Video track</span>
+					<span class="chip" data-if="watch_multi_audio"><img class="key-icon" src="icons/triangle.png"/>&nbsp;Audio track</span>
 					<span class="chip"><img class="key-icon" src="icons/cross.png"/>&nbsp;Play/Pause</span>
 					<span class="chip"><img class="key-icon" src="icons/circle.png"/>&nbsp;Stop</span>
-					
+					<span class="chip"><img class="key-icon" src="icons/options.png"/>&nbsp;Info</span>
 				</div>
 			</div>
 		</div>

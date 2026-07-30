@@ -38,16 +38,24 @@ struct Entry {
   std::string format;       // MIME type or container hint, e.g. "video/mp4"
 
   // Best playable resource in a form ffmpeg can open (URL or local path).
+  // May be empty (or stale) when 'resolvable' is set; see Source::Resolve().
   std::string res_url;
   int64_t duration_us = -1; // -1 = unknown
   int64_t size_bytes = -1;
   std::string resolution;   // e.g. "1920x1080"
 
+  // The source can mint a res_url for this entry from 'id' at playback
+  // time. Set by sources whose URLs are signed or otherwise short-lived,
+  // where the one seen while browsing may already have expired.
+  bool resolvable = false;
+
   bool IsFolder() const { return kind == Kind::Folder; }
   bool IsAudio() const { return kind == Kind::Audio; }
   bool IsVideo() const { return kind == Kind::Video; }
   bool IsImage() const { return kind == Kind::Image; }
-  bool IsPlayable() const { return !IsFolder() && !res_url.empty(); }
+  bool IsPlayable() const {
+    return !IsFolder() && (!res_url.empty() || resolvable);
+  }
 };
 
 struct Listing {
@@ -69,6 +77,23 @@ public:
   // Lists the direct children of 'id'. Blocking; worker thread only.
   virtual bool Browse(const std::string& id, Listing& out,
                       std::string& error) = 0;
+
+  // Turns 'entry' into something ffmpeg can open, immediately before
+  // playback starts. The default hands back the res_url captured while
+  // browsing, which is all a DLNA server or a local file needs; sources
+  // whose URLs carry a token that expires between listing and playing
+  // override this and mint a fresh one from entry.id.
+  //
+  // Blocking (it may do I/O); worker thread only.
+  virtual bool Resolve(const Entry& entry, std::string& url,
+                       std::string& error) {
+    url = entry.res_url;
+    if (url.empty()) {
+      error = "this item has no playable resource";
+      return false;
+    }
+    return true;
+  }
 };
 
 using SourcePtr = std::shared_ptr<Source>;

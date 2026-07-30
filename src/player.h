@@ -28,11 +28,14 @@ extern "C" {
 
 #include "visualizer.h"
 
-// One selectable audio stream of the open file.
-struct AudioTrackInfo {
+// One selectable elementary stream of the open file.
+struct TrackInfo {
   int stream_index = -1; // ffmpeg stream index, stable while the file is open
   std::string label;     // display string ("eng · ac3 5.1(side)", ...)
 };
+
+using AudioTrackInfo = TrackInfo; // "eng · ac3 5.1(side)"
+using VideoTrackInfo = TrackInfo; // "h264 1920x1080"
 
 // Audio format handed to SDL.
 inline constexpr int kPlayerAudioRate = 48000;
@@ -129,6 +132,19 @@ public:
   bool TogglePause();
   bool IsPaused() const { return paused_; }
 
+  // --- Video tracks -------------------------------------------------------
+  // The video streams found in the open file, in file order (attached
+  // cover art excluded). Fixed for the lifetime of the file.
+  std::vector<VideoTrackInfo> VideoTracks() const;
+  int VideoTrackCount() const { return vtrack_count_.load(); }
+  // ffmpeg stream index of the track being decoded, or -1.
+  int CurrentVideoStream() const { return video_stream_.load(); }
+  // Label of the track being decoded; "" when there is no video.
+  std::string CurrentVideoLabel() const;
+  // Switches decoding to another video stream of the open file. Same
+  // contract as SelectAudioTrack().
+  bool SelectVideoTrack(int stream_index);
+
   // --- Audio tracks -------------------------------------------------------
   // The audio streams found in the open file, in file order. Fixed for the
   // lifetime of the file; empty when nothing is open.
@@ -136,6 +152,8 @@ public:
   int AudioTrackCount() const { return track_count_.load(); }
   // ffmpeg stream index of the track being decoded, or -1.
   int CurrentAudioStream() const { return audio_stream_.load(); }
+  // Label of the track being decoded; "" when there is no audio.
+  std::string CurrentAudioLabel() const;
   // Switches decoding to another audio stream of the open file. Returns
   // false if the index is unknown, already active, or no audio pipeline is
   // running. Non-blocking: the demux thread applies the switch and, when
@@ -187,6 +205,10 @@ private:
   bool OpenAudioDevice();
   // Audio thread only: replaces actx_ with a decoder for another stream.
   bool ReopenAudioDecoder(int stream_index);
+  // Video thread only: replaces vctx_ with a decoder for another stream.
+  bool ReopenVideoDecoder(int stream_index);
+  // Builds video_tracks_/audio_tracks_ from the open container.
+  void CollectTracks();
   void PushVideoFrame(AVFrame* frame);
   void DropDecodedFrames();
   void SetStatus(const std::string& text);
@@ -195,11 +217,21 @@ private:
   std::atomic<bool> threads_running_{false};
 
   // --- video ---
-  int video_stream_ = -1;
+  // Written by OpenInput/CloseInput and by the demux thread on a track
+  // switch; read from the decode threads and the main thread, hence atomic.
+  std::atomic<int> video_stream_{-1};
   AVCodecContext* vctx_ = nullptr;
   SwsContext* sws_ = nullptr; // lazy, only if decoder output isn't yuv420p
   std::thread vthread_;
   PacketQueue vqueue_;
+
+  // Selectable video tracks; fixed after OpenInput, cleared in CloseInput.
+  // Guarded by tracks_mutex_, like the audio ones.
+  std::vector<VideoTrackInfo> video_tracks_;
+  std::atomic<int> vtrack_count_{0};
+  // ffmpeg stream index to switch to; -1 = none pending. Set by
+  // SelectVideoTrack(), consumed by the demux thread.
+  std::atomic<int> video_switch_target_{-1};
 
   std::mutex frames_mutex_;
   std::condition_variable frames_cv_;

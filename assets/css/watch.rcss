@@ -61,10 +61,19 @@ body.watching #shell {
 	overflow: hidden;
 }
 
-.watch-atrack {
+/* Codec line: the video and audio streams being decoded, side by side. */
+.watch-tracks {
+	display: flex;
+	flex-direction: row;
 	margin-top: 6px;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.watch-track {
 	font-size: 26px;
 	color: #8593ab;
+	margin-right: 32px;
 	white-space: nowrap;
 	overflow: hidden;
 }

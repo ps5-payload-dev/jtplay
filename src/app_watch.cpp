@@ -15,11 +15,23 @@ void App::PlayEntry(const browse::Entry& entry) {
   playing_ = entry;
   EnterWatch(entry);
 
-  const std::string url = entry.res_url;
+  // Resolve and open on the worker: a source with expiring URLs mints one
+  // here, as late as possible, and both steps may block on the network.
+  const browse::Entry item = playing_;
+  const browse::SourcePtr source = current_source_;
   busy_ops_++;
-  PostTask([this, url] {
+  PostTask([this, item, source] {
     std::string error;
-    const bool ok = player_->Open(url, error);
+    std::string url = item.res_url;
+    bool ok;
+    if (source)
+      ok = source->Resolve(item, url, error);
+    else
+      ok = !url.empty();
+    if (ok)
+      ok = player_->Open(url, error);
+    else if (error.empty())
+      error = "this item has no playable resource";
     {
       std::lock_guard<std::mutex> lock(pending_.mutex);
       pending_.play_ready = true;
@@ -47,7 +59,10 @@ void App::EnterWatch(const browse::Entry& entry) {
   bind_watch_paused_ = false;
   bind_watch_time_ = "";
   bind_watch_progress_ = "0%";
+  bind_watch_vtrack_ = "";
   bind_watch_atrack_ = "";
+  bind_watch_multi_video_ = false;
+  bind_watch_multi_audio_ = false;
   model_.DirtyVariable("watching");
   model_.DirtyVariable("watch_audio");
   model_.DirtyVariable("watch_title");
@@ -55,7 +70,10 @@ void App::EnterWatch(const browse::Entry& entry) {
   model_.DirtyVariable("watch_paused");
   model_.DirtyVariable("watch_time");
   model_.DirtyVariable("watch_progress");
+  model_.DirtyVariable("watch_vtrack");
   model_.DirtyVariable("watch_atrack");
+  model_.DirtyVariable("watch_multi_video");
+  model_.DirtyVariable("watch_multi_audio");
   RefreshArtBindings();
   ShowWatchInfo(kWatchInfoSec);
 }
@@ -114,20 +132,31 @@ void App::UpdateWatchOverlay() {
     model_.DirtyVariable("watch_seekable");
   }
 
-  // Active audio track; only shown when there is actually a choice.
-  Rml::String atrack;
-  if (player_->AudioTrackCount() > 1) {
-    const int cur = player_->CurrentAudioStream();
-    for (const AudioTrackInfo& t : player_->AudioTracks()) {
-      if (t.stream_index == cur) {
-        atrack = t.label;
-        break;
-      }
-    }
+  // Codec lines for the info bar. These are the labels of the streams
+  // actually being decoded, so they follow a track switch; the counts only
+  // decide whether the switch hints are worth showing.
+  const Rml::String vtrack = player_->CurrentVideoLabel();
+  if (bind_watch_vtrack_ != vtrack) {
+    bind_watch_vtrack_ = vtrack;
+    model_.DirtyVariable("watch_vtrack");
   }
+
+  const Rml::String atrack = player_->CurrentAudioLabel();
   if (bind_watch_atrack_ != atrack) {
     bind_watch_atrack_ = atrack;
     model_.DirtyVariable("watch_atrack");
+  }
+
+  const bool multi_video = player_->VideoTrackCount() > 1;
+  if (bind_watch_multi_video_ != multi_video) {
+    bind_watch_multi_video_ = multi_video;
+    model_.DirtyVariable("watch_multi_video");
+  }
+
+  const bool multi_audio = player_->AudioTrackCount() > 1;
+  if (bind_watch_multi_audio_ != multi_audio) {
+    bind_watch_multi_audio_ = multi_audio;
+    model_.DirtyVariable("watch_multi_audio");
   }
 }
 
@@ -149,6 +178,29 @@ void App::CycleAudioTrack() {
 
   if (player_->SelectAudioTrack(tracks[next].stream_index)) {
     ShowToast("Audio " + std::to_string(next + 1) + "/" +
+              std::to_string(tracks.size()) + ": " + tracks[next].label);
+  }
+}
+
+// Square: switches to the next video track (wrapping around). Streams that
+// carry several camera angles or bitrate variants show up as separate video
+// streams in one container, which is what this walks.
+void App::CycleVideoTrack() {
+  const std::vector<VideoTrackInfo> tracks = player_->VideoTracks();
+  if (tracks.size() < 2) {
+    if (!tracks.empty())
+      ShowToast("Only one video track");
+    return;
+  }
+
+  const int cur = player_->CurrentVideoStream();
+  size_t i = 0;
+  while (i < tracks.size() && tracks[i].stream_index != cur)
+    i++;
+  const size_t next = (i + 1) % tracks.size(); // cur not found -> wraps to 0
+
+  if (player_->SelectVideoTrack(tracks[next].stream_index)) {
+    ShowToast("Video " + std::to_string(next + 1) + "/" +
               std::to_string(tracks.size()) + ": " + tracks[next].label);
   }
 }
@@ -227,7 +279,12 @@ void App::HandleKeyWatch(Rml::Event& event, int key) {
     ShowWatchInfo(kWatchInfoSec);
     break;
 
-  case Rml::Input::KI_SPACE: // square: toggle the info bar
+  case Rml::Input::KI_SPACE: // square: next video track
+    CycleVideoTrack();
+    ShowWatchInfo(kWatchInfoSec);
+    break;
+
+  case Rml::Input::KI_F1: // options: toggle the info bar
     if (bind_info_visible_ && !bind_watch_audio_) {
       bind_info_visible_ = false;
       model_.DirtyVariable("info_visible");
