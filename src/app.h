@@ -34,7 +34,7 @@ public:
   struct Options {
     std::string assets_dir = "assets";   // directory containing main.rml
     std::string cache_dir;               // artwork cache; "" = XDG default
-    std::string plugins_dir;             // Lua plugin scripts; "" = none
+    std::string plugins_dir;             // JS plugin scripts; "" = none
     std::vector<std::string> media_dirs; // extra local roots to browse
   };
 

@@ -20,7 +20,7 @@ static void PrintUsage(const char* argv0) {
     "                     (default: ./assets)\n"
     "  -f, --fonts DIR    font directory\n"
     "                     (default: <assets>/../fonts)\n"
-    "  -p, --plugins DIR  Lua plugin directory\n"
+    "  -p, --plugins DIR  JavaScript plugin directory\n"
     "                     (default: <assets>/../plugins)\n"
     "  -c, --cache DIR    artwork cache directory\n"
     "                     (default: $XDG_CACHE_HOME/jtplay,\n"

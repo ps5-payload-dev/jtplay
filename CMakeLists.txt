@@ -15,7 +15,9 @@ pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET
                          libavcodec libavformat libavutil libswresample libswscale)
 pkg_check_modules(SDL2_IMAGE REQUIRED IMPORTED_TARGET SDL2_image)
 pkg_check_modules(TINYXML2 REQUIRED IMPORTED_TARGET tinyxml2)
-pkg_check_modules(LUA REQUIRED IMPORTED_TARGET luajit)
+pkg_check_modules(CURL REQUIRED IMPORTED_TARGET libcurl)
+find_path(QUICKJS_INLCUDE_DIR NAMES quickjs.h PATH_SUFFIXES quickjs)
+find_library(QUICKJS_LIBRARY NAMES quickjs PATH_SUFFIXES quickjs)
 
 add_executable(jtplay
     src/main.cpp
@@ -26,7 +28,8 @@ add_executable(jtplay
     src/visualizer.cpp
     src/browse/dlna_source.cpp
     src/browse/fs_source.cpp
-    src/browse/lua_source.cpp
+    src/browse/js_http.cpp
+    src/browse/js_source.cpp
     src/upnp/http.cpp
     src/upnp/ssdp.cpp
     src/upnp/dlna.cpp
@@ -35,9 +38,9 @@ add_executable(jtplay
     src/RmlUi/Platform_SDL.cpp
 )
 
-target_include_directories(jtplay PRIVATE src)
-
 target_compile_options(jtplay PRIVATE -Wall -Werror)
+
+target_include_directories(jtplay PRIVATE ${QUICKJS_INLCUDE_DIR} src)
 
 target_link_libraries(jtplay PRIVATE
     SDL2::SDL2
@@ -47,6 +50,9 @@ target_link_libraries(jtplay PRIVATE
     PkgConfig::FFMPEG
     PkgConfig::SDL2_IMAGE
     PkgConfig::TINYXML2
-    PkgConfig::LUA
+    PkgConfig::CURL
     Threads::Threads
+    ${QUICKJS_LIBRARY}
+    m
 )
+

@@ -12,7 +12,8 @@ async function main() {
 		args: ['--assets', CWD + '/assets',
 		       '--fonts', CWD + '/fonts',
 		       '--plugins', CWD + '/plugins',
-		       '--cache', CWD + '/cache']
+		       '--cache', CWD + '/cache'],
+		env: {CURL_CA_BUNDLE: CWD + '/ca-bundle.crt'}
 	    };
         }
     };

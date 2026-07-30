@@ -14,7 +14,7 @@
 #include "app_internal.h"
 #include "browse/dlna_source.h"
 #include "browse/fs_source.h"
-#include "browse/lua_source.h"
+#include "browse/js_source.h"
 #include "upnp/http.h"
 
 using namespace appdetail;
@@ -64,7 +64,7 @@ bool App::Initialize(Rml::Context* context, const Options& options, std::string&
   providers_.push_back(std::make_unique<browse::FsProvider>());
   providers_.push_back(std::make_unique<browse::DlnaProvider>(kDiscoveryWaitMs));
   if (!options.plugins_dir.empty())
-    browse::LoadLuaProviders(options.plugins_dir, providers_);
+    browse::LoadJsProviders(options.plugins_dir, providers_);
 
   worker_running_ = true;
   worker_ = std::thread(&App::WorkerMain, this);
