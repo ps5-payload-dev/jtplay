@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
-#include <cstdlib>
 #include <cstring>
 
 #include "browse/fs_source.h"
@@ -24,56 +23,54 @@ namespace browse {
       return ext;
     }
 
-    struct ExtInfo {
-      Entry::Kind kind;
-      const char* mime; // shown in the details pane
-    };
-
-    // Extension -> kind/MIME. Deliberately permissive on the video side; ffmpeg
-    // will tell us soon enough if it cannot open something.
-    const ExtInfo* ClassifyExt(const std::string& ext) {
-      static const std::pair<const char*, ExtInfo> kMap[] = {
+    // Extension -> entry type; anything not listed here is not shown at all.
+    // Deliberately permissive on the video side; ffmpeg will tell us soon
+    // enough if it cannot open something.
+    bool ClassifyExt(const std::string& ext, Entry::Type& type) {
+      static const std::pair<const char*, Entry::Type> kMap[] = {
 	// Audio
-	{"mp3",  {Entry::Kind::Audio, "audio/mpeg"}},
-	{"flac", {Entry::Kind::Audio, "audio/flac"}},
-	{"ogg",  {Entry::Kind::Audio, "audio/ogg"}},
-	{"oga",  {Entry::Kind::Audio, "audio/ogg"}},
-	{"opus", {Entry::Kind::Audio, "audio/opus"}},
-	{"m4a",  {Entry::Kind::Audio, "audio/mp4"}},
-	{"aac",  {Entry::Kind::Audio, "audio/aac"}},
-	{"wav",  {Entry::Kind::Audio, "audio/wav"}},
-	{"wma",  {Entry::Kind::Audio, "audio/x-ms-wma"}},
-	{"ape",  {Entry::Kind::Audio, "audio/x-ape"}},
-	{"mka",  {Entry::Kind::Audio, "audio/x-matroska"}},
+	{"mp3",  Entry::Type::Audio},
+	{"flac", Entry::Type::Audio},
+	{"ogg",  Entry::Type::Audio},
+	{"oga",  Entry::Type::Audio},
+	{"opus", Entry::Type::Audio},
+	{"m4a",  Entry::Type::Audio},
+	{"aac",  Entry::Type::Audio},
+	{"wav",  Entry::Type::Audio},
+	{"wma",  Entry::Type::Audio},
+	{"ape",  Entry::Type::Audio},
+	{"mka",  Entry::Type::Audio},
 	// Video
-	{"mkv",  {Entry::Kind::Video, "video/x-matroska"}},
-	{"mp4",  {Entry::Kind::Video, "video/mp4"}},
-	{"m4v",  {Entry::Kind::Video, "video/mp4"}},
-	{"mov",  {Entry::Kind::Video, "video/quicktime"}},
-	{"avi",  {Entry::Kind::Video, "video/x-msvideo"}},
-	{"webm", {Entry::Kind::Video, "video/webm"}},
-	{"ts",   {Entry::Kind::Video, "video/mp2t"}},
-	{"m2ts", {Entry::Kind::Video, "video/mp2t"}},
-	{"mts",  {Entry::Kind::Video, "video/mp2t"}},
-	{"mpg",  {Entry::Kind::Video, "video/mpeg"}},
-	{"mpeg", {Entry::Kind::Video, "video/mpeg"}},
-	{"vob",  {Entry::Kind::Video, "video/mpeg"}},
-	{"wmv",  {Entry::Kind::Video, "video/x-ms-wmv"}},
-	{"flv",  {Entry::Kind::Video, "video/x-flv"}},
-	{"3gp",  {Entry::Kind::Video, "video/3gpp"}},
+	{"mkv",  Entry::Type::Video},
+	{"mp4",  Entry::Type::Video},
+	{"m4v",  Entry::Type::Video},
+	{"mov",  Entry::Type::Video},
+	{"avi",  Entry::Type::Video},
+	{"webm", Entry::Type::Video},
+	{"ts",   Entry::Type::Video},
+	{"m2ts", Entry::Type::Video},
+	{"mts",  Entry::Type::Video},
+	{"mpg",  Entry::Type::Video},
+	{"mpeg", Entry::Type::Video},
+	{"vob",  Entry::Type::Video},
+	{"wmv",  Entry::Type::Video},
+	{"flv",  Entry::Type::Video},
+	{"3gp",  Entry::Type::Video},
 	// Images
-	{"jpg",  {Entry::Kind::Image, "image/jpeg"}},
-	{"jpeg", {Entry::Kind::Image, "image/jpeg"}},
-	{"png",  {Entry::Kind::Image, "image/png"}},
-	{"gif",  {Entry::Kind::Image, "image/gif"}},
-	{"bmp",  {Entry::Kind::Image, "image/bmp"}},
-	{"webp", {Entry::Kind::Image, "image/webp"}},
+	{"jpg",  Entry::Type::Image},
+	{"jpeg", Entry::Type::Image},
+	{"png",  Entry::Type::Image},
+	{"gif",  Entry::Type::Image},
+	{"bmp",  Entry::Type::Image},
+	{"webp", Entry::Type::Image},
       };
       for (const auto& m : kMap) {
-	if (ext == m.first)
-	  return &m.second;
+	if (ext == m.first) {
+	  type = m.second;
+	  return true;
+	}
       }
-      return nullptr;
+      return false;
     }
 
     // Case-insensitive match against the usual cover art file names.
@@ -105,6 +102,15 @@ namespace browse {
       while (path.size() > 1 && path.back() == '/')
 	path.pop_back();
       return path;
+    }
+
+    // Ids stay plain absolute paths (that is what Browse() takes); the
+    // playable and artwork URIs get a scheme, like every other source.
+    // Not percent-encoded: both consumers (ffmpeg's file protocol and the
+    // app's artwork cache) strip the prefix and open the rest verbatim,
+    // which is what a path with spaces or '#' in it needs.
+    std::string FileUri(const std::string& path) {
+      return "file://" + path;
     }
 
   }
@@ -146,29 +152,27 @@ namespace browse {
       if (S_ISDIR(st.st_mode)) {
 	Entry e;
 	e.id = path;
-	e.title = name;
-	e.kind = Entry::Kind::Folder;
+	e.type = Entry::Type::Folder;
+	e.name = name;
 	folders.push_back(std::move(e));
 	continue;
       }
       if (!S_ISREG(st.st_mode))
 	continue;
 
-      const ExtInfo* info = ClassifyExt(LowerExt(name));
-      if (!info)
+      Entry::Type type = Entry::Type::Other;
+      if (!ClassifyExt(LowerExt(name), type))
 	continue;
       if (cover.empty() && IsCoverName(name))
 	cover = path;
 
       Entry e;
       e.id = path;
-      e.title = name;
-      e.kind = info->kind;
-      e.format = info->mime;
-      e.res_url = path;
-      e.size_bytes = (int64_t)st.st_size;
-      if (info->kind == Entry::Kind::Image)
-	e.art_url = path; // the image previews itself in the details pane
+      e.type = type;
+      e.name = name;
+      e.uri = FileUri(path);
+      if (type == Entry::Type::Image)
+	e.image = e.uri; // the image previews itself in the details pane
       files.push_back(std::move(e));
     }
     ::closedir(d);
@@ -176,21 +180,21 @@ namespace browse {
     // Audio tracks inherit the directory's cover art, album-folder style.
     if (!cover.empty()) {
       for (Entry& e : files) {
-	if (e.IsAudio() && e.art_url.empty())
-	  e.art_url = cover;
+	if (e.IsAudio() && e.image.empty())
+	  e.image = FileUri(cover);
       }
     }
 
-    auto by_title = [](const Entry& a, const Entry& b) {
-      return CaseInsensitiveLess(a.title, b.title);
+    auto by_name = [](const Entry& a, const Entry& b) {
+      return CaseInsensitiveLess(a.name, b.name);
     };
-    std::sort(folders.begin(), folders.end(), by_title);
-    std::sort(files.begin(), files.end(), by_title);
+    std::sort(folders.begin(), folders.end(), by_name);
+    std::sort(files.begin(), files.end(), by_name);
 
-    out.entries = std::move(folders);
-    out.entries.insert(out.entries.end(),
-		       std::make_move_iterator(files.begin()),
-		       std::make_move_iterator(files.end()));
+    out = std::move(folders);
+    out.insert(out.end(),
+	       std::make_move_iterator(files.begin()),
+	       std::make_move_iterator(files.end()));
     return true;
   }
 }

@@ -11,7 +11,6 @@
 #ifndef BROWSE_SOURCE_H
 #define BROWSE_SOURCE_H
 
-#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -19,48 +18,39 @@
 namespace browse {
 
 // One entry of a listing: either a folder or a (hopefully) playable item.
-// This is the only shape of media metadata the UI understands; every source
-// converts its native objects into it.
+//
+// Six fields, deliberately: what the UI draws and what the player opens,
+// and nothing else. It is not modelled on any one protocol; every source
+// projects its native objects onto this, dropping whatever does not fit.
 struct Entry {
-  enum class Kind { Folder, Audio, Video, Image, Other };
+  enum class Type { Folder, Audio, Video, Image, Other };
 
-  std::string id;           // source-specific opaque id (object id, path, ...)
-  std::string title;
-  Kind kind = Kind::Other;
-  int child_count = -1;     // folders only; -1 = not reported
+  // Opaque and source specific: a path, a DIDL object id, a uuid, ...
+  // Handed back to Browse() for folders and to Resolve() for items, so it
+  // has to mean something to the source that minted it and to nobody else.
+  std::string id;
+  Type type = Type::Other;
 
-  // Metadata, all optional.
-  std::string artist;
-  std::string album;
-  std::string genre;
-  std::string date;
-  std::string art_url;      // http(s) URL or an absolute local file path
-  std::string format;       // MIME type or container hint, e.g. "video/mp4"
+  // What to show: one line of title, one line of anything else worth
+  // knowing ("Miles Davis - Kind of Blue", a plot summary, a station
+  // tagline). Both are display strings; nothing parses them.
+  std::string name;
+  std::string description;
 
-  // Best playable resource in a form ffmpeg can open (URL or local path).
-  // May be empty (or stale) when 'resolvable' is set; see Source::Resolve().
-  std::string res_url;
-  int64_t duration_us = -1; // -1 = unknown
-  int64_t size_bytes = -1;
-  std::string resolution;   // e.g. "1920x1080"
+  // Artwork and media, as URIs the app can open: file://, http://,
+  // https://, or anything else ffmpeg understands. 'image' is empty when
+  // there is no artwork; 'uri' may be empty when the source mints one on
+  // demand (see Source::Resolve).
+  std::string image;
+  std::string uri;
 
-  // The source can mint a res_url for this entry from 'id' at playback
-  // time. Set by sources whose URLs are signed or otherwise short-lived,
-  // where the one seen while browsing may already have expired.
-  bool resolvable = false;
-
-  bool IsFolder() const { return kind == Kind::Folder; }
-  bool IsAudio() const { return kind == Kind::Audio; }
-  bool IsVideo() const { return kind == Kind::Video; }
-  bool IsImage() const { return kind == Kind::Image; }
-  bool IsPlayable() const {
-    return !IsFolder() && (!res_url.empty() || resolvable);
-  }
+  bool IsFolder() const { return type == Type::Folder; }
+  bool IsAudio() const { return type == Type::Audio; }
+  bool IsVideo() const { return type == Type::Video; }
+  bool IsImage() const { return type == Type::Image; }
 };
 
-struct Listing {
-  std::vector<Entry> entries;
-};
+using Listing = std::vector<Entry>;
 
 // One browsable tree of media.
 class Source {
@@ -79,17 +69,17 @@ public:
                       std::string& error) = 0;
 
   // Turns 'entry' into something ffmpeg can open, immediately before
-  // playback starts. The default hands back the res_url captured while
+  // playback starts. The default hands back the uri captured while
   // browsing, which is all a DLNA server or a local file needs; sources
-  // whose URLs carry a token that expires between listing and playing
+  // whose URIs carry a token that expires between listing and playing
   // override this and mint a fresh one from entry.id.
   //
   // Blocking (it may do I/O); worker thread only.
-  virtual bool Resolve(const Entry& entry, std::string& url,
+  virtual bool Resolve(const Entry& entry, std::string& uri,
                        std::string& error) {
-    url = entry.res_url;
-    if (url.empty()) {
-      error = "this item has no playable resource";
+    uri = entry.uri;
+    if (uri.empty()) {
+      error = "this item has nothing to play";
       return false;
     }
     return true;

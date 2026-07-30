@@ -49,23 +49,6 @@ inline std::string FormatTime(int64_t us)
   return buf;
 }
 
-// Bytes -> "1.4 GB".
-inline std::string FormatSize(int64_t bytes)
-{
-  if (bytes < 0)
-    return {};
-  const char* units[] = {"B", "kB", "MB", "GB", "TB"};
-  double v = (double)bytes;
-  int u = 0;
-  while (v >= 1000.0 && u < 4) {
-    v /= 1000.0;
-    u++;
-  }
-  char buf[32];
-  std::snprintf(buf, sizeof(buf), v < 10 ? "%.1f %s" : "%.0f %s", v, units[u]);
-  return buf;
-}
-
 } // namespace appdetail
 
 #endif

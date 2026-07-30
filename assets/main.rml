@@ -69,8 +69,7 @@
 						     data-event-click="select_entry(it_index)">
 							<div class="eicon">{{e.icon}}</div>
 							<div class="einfo">
-								<div class="etitle">{{e.title}}</div>
-								<div class="emeta" data-if="e.meta != ''">{{e.meta}}</div>
+								<div class="etitle">{{e.name}}</div>
 							</div>
 						</div>
 						<div class="empty" data-if="entry_count == 0 && !busy">
@@ -86,11 +85,9 @@
 					<div class="pane-head">
 						<span class="eyebrow">Details</span>
 					</div>
-					<div class="detail-body" data-if="detail_title != ''">
-						<div class="detail-title">{{detail_title}}</div>
-						<div class="detail-meta" data-if="detail_meta != ''">{{detail_meta}}</div>
-						<div class="detail-desc" data-if="detail_desc != ''">{{detail_desc}}</div>
-						<img class="detail-art" data-if="detail_art != ''" data-attr-src="detail_art"/>						
+					<div class="detail-body" data-if="detail_description != '' || detail_image != ''">
+						<img class="detail-art" data-if="detail_image != ''" data-attr-src="detail_image"/>
+						<div class="detail-desc" data-if="detail_description != ''">{{detail_description}}</div>
 					</div>
 				</div>
 			</div>
@@ -107,10 +104,10 @@
 
 		<!-- Audio: persistent now-playing card in the middle of the screen. -->
 		<div id="audio-card" data-if="watching && watch_audio">
-			<img class="np-art" data-if="np_art != ''" data-attr-src="np_art"/>
-			<div class="art" data-if="np_art == ''">🎵</div>
-			<div class="np-title">{{watch_title}}</div>
-			<div class="np-meta" data-if="watch_meta != ''">{{watch_meta}}</div>
+			<img class="np-art" data-if="watch_image != ''" data-attr-src="watch_image"/>
+			<div class="art" data-if="watch_image == ''">🎵</div>
+			<div class="np-title">{{watch_name}}</div>
+			<div class="np-meta" data-if="watch_description != ''">{{watch_description}}</div>
 			<div class="np-atrack" data-if="watch_multi_audio"><img class="key-icon" src="icons/triangle.png"/>&nbsp;{{watch_atrack}}</div>
 			<div class="watch-progress" data-if="watch_seekable">
 				<div class="bar" data-style-width="watch_progress"/>
@@ -121,9 +118,9 @@
 
 		<!-- Video: auto-hiding transport bar over the frames. -->
 		<div id="watch-bar" data-if="watching && !watch_audio && info_visible">
-			<img class="watch-thumb" data-if="np_art != ''" data-attr-src="np_art"/>
+			<img class="watch-thumb" data-if="watch_image != ''" data-attr-src="watch_image"/>
 			<div class="watch-main">
-				<div class="watch-name">{{watch_title}}</div>
+				<div class="watch-name">{{watch_name}}</div>
 				<div class="watch-tracks">
 					<span class="watch-track" data-if="watch_vtrack != ''">Video: {{watch_vtrack}}</span>
 					<span class="watch-track" data-if="watch_atrack != ''">Audio: {{watch_atrack}}</span>

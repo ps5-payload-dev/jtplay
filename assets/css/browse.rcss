@@ -142,15 +142,8 @@
 	color: #e8edf7;
 }
 
-.detail-meta {
-	margin-top: 10px;
-	font-size: 23px;
-	color: #4dd6b8;
-	letter-spacing: 1px;
-}
-
 .detail-desc {
-	margin-top: 22px;
+	margin-top: 14px;
 	font-size: 24px;
 	line-height: 1.55em;
 	color: #aab6cc;

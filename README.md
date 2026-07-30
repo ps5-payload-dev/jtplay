@@ -23,8 +23,14 @@ return {
         root: "/",                 // root folder id (optional)
         browse(id) {               // list the children of 'id'
           return [
-            { title: "A stream", kind: "audio",
-              url: "https://example.com/stream" },
+            {
+              id: "bbc1",                        // optional; defaults to uri
+              type: "audio",                     // folder|audio|video|image
+              name: "A stream",                  // required
+              description: "Some station",       // optional
+              image: "https://example.com/a.jpg",// optional
+              uri: "https://example.com/stream",
+            },
           ];
         },
       },
@@ -45,8 +51,15 @@ the RmlUi log, and the `http` object below. There is no event loop:
 `async` function returns a promise and is reported as an error), and a call
 that spends more than 10 seconds *executing* is interrupted.
 
-See `src/browse/js_source.h` for the full set of entry fields and
-`plugins/sr.js` (Sveriges Radio live channels) for a working example.
+An entry has six fields and no more: `id`, `type`, `name`, `description`,
+`image` and `uri` (see `browse::Entry` in `src/browse/source.h`). Only `name`
+is required; a `folder` entry is browsed by handing its `id` back to
+`browse()`, anything else is opened by its `uri`. A source that serves signed
+or otherwise short-lived URIs can leave `uri` out and add a
+`resolve(id, entry)` function returning a fresh one (as a string, or as an
+entry object with a `uri`) at the moment playback starts.
+
+See `plugins/sr.js` (Sveriges Radio live channels) for a working example.
 
 ### Fetching over the network
 

@@ -3,7 +3,6 @@
 #include <dirent.h>
 
 #include <algorithm>
-#include <cmath>
 #include <cstdint>
 #include <fstream>
 #include <sstream>
@@ -127,32 +126,6 @@ namespace browse {
       return ToStdString(ctx, v.get());
     }
 
-    int64_t FieldInteger(JSContext* ctx, JSValue obj, const char* key,
-			 int64_t fallback) {
-      Ref v(ctx, JS_GetPropertyStr(ctx, obj, key));
-      if (!JS_IsNumber(v.get()))
-	return fallback;
-      int64_t out = 0;
-      if (JS_ToInt64(ctx, &out, v.get()) < 0) {
-	JS_FreeValue(ctx, JS_GetException(ctx));
-	return fallback;
-      }
-      return out;
-    }
-
-    double FieldNumber(JSContext* ctx, JSValue obj, const char* key,
-		       double fallback) {
-      Ref v(ctx, JS_GetPropertyStr(ctx, obj, key));
-      if (!JS_IsNumber(v.get()))
-	return fallback;
-      double out = 0.0;
-      if (JS_ToFloat64(ctx, &out, v.get()) < 0) {
-	JS_FreeValue(ctx, JS_GetException(ctx));
-	return fallback;
-      }
-      return out;
-    }
-
     // Length of an array (or any array-like). JS_IsArray() has an
     // incompatible signature across QuickJS forks, so duck-type instead.
     bool ArrayLength(JSContext* ctx, JSValue v, int64_t& out) {
@@ -168,55 +141,45 @@ namespace browse {
       return out >= 0;
     }
 
-    Entry::Kind KindFromString(const std::string& s) {
-      if (s == "folder") return Entry::Kind::Folder;
-      if (s == "audio")  return Entry::Kind::Audio;
-      if (s == "video")  return Entry::Kind::Video;
-      if (s == "image")  return Entry::Kind::Image;
-      return Entry::Kind::Other;
+    Entry::Type TypeFromString(const std::string& s) {
+      if (s == "folder") return Entry::Type::Folder;
+      if (s == "audio")  return Entry::Type::Audio;
+      if (s == "video")  return Entry::Type::Video;
+      if (s == "image")  return Entry::Type::Image;
+      return Entry::Type::Other;
     }
 
-    // Converts one entry object into 'out'.
+    const char* TypeToString(Entry::Type type) {
+      switch (type) {
+      case Entry::Type::Folder: return "folder";
+      case Entry::Type::Audio:  return "audio";
+      case Entry::Type::Video:  return "video";
+      case Entry::Type::Image:  return "image";
+      default:                  return "other";
+      }
+    }
+
+    // Converts one entry object into 'out'. The script writes the same six
+    // fields the app reads; 'id' defaults to the uri, then to the name, so
+    // a plugin listing plain streams need not invent one.
     bool ToEntry(JSContext* ctx, JSValue v, Entry& out, std::string& error) {
       if (!JS_IsObject(v)) {
 	error = "entry is not an object";
 	return false;
       }
 
-      out.title = FieldString(ctx, v, "title");
-      if (out.title.empty()) {
-	error = "entry has no title";
+      out.name = FieldString(ctx, v, "name");
+      if (out.name.empty()) {
+	error = "entry has no name";
 	return false;
       }
-      out.kind = KindFromString(FieldString(ctx, v, "kind"));
-      out.res_url = FieldString(ctx, v, "url");
+      out.type = TypeFromString(FieldString(ctx, v, "type"));
+      out.description = FieldString(ctx, v, "description");
+      out.image = FieldString(ctx, v, "image");
+      out.uri = FieldString(ctx, v, "uri");
       out.id = FieldString(ctx, v, "id",
-			   out.res_url.empty() ? out.title : out.res_url);
-      out.child_count = (int)FieldInteger(ctx, v, "children", -1);
-
-      out.artist = FieldString(ctx, v, "artist");
-      out.album = FieldString(ctx, v, "album");
-      out.genre = FieldString(ctx, v, "genre");
-      out.date = FieldString(ctx, v, "date");
-      out.art_url = FieldString(ctx, v, "art");
-      out.format = FieldString(ctx, v, "format");
-      out.resolution = FieldString(ctx, v, "resolution");
-      out.size_bytes = FieldInteger(ctx, v, "size", -1);
-
-      const double seconds = FieldNumber(ctx, v, "duration", -1.0);
-      if (seconds >= 0.0)
-	out.duration_us = (int64_t)std::llround(seconds * 1e6);
+			   out.uri.empty() ? out.name : out.uri);
       return true;
-    }
-
-    const char* KindToString(Entry::Kind kind) {
-      switch (kind) {
-      case Entry::Kind::Folder: return "folder";
-      case Entry::Kind::Audio:  return "audio";
-      case Entry::Kind::Video:  return "video";
-      case Entry::Kind::Image:  return "image";
-      default:                  return "other";
-      }
     }
 
     // The mirror of ToEntry(): hands an entry back to the script, so
@@ -232,32 +195,12 @@ namespace browse {
 			    JS_NewStringLen(ctx, value.data(), value.size()));
       };
       set_str("id", e.id);
-      set_str("title", e.title);
-      JS_SetPropertyStr(ctx, obj, "kind", JS_NewString(ctx, KindToString(e.kind)));
-      set_str("url", e.res_url);
-      set_str("artist", e.artist);
-      set_str("album", e.album);
-      set_str("genre", e.genre);
-      set_str("date", e.date);
-      set_str("art", e.art_url);
-      set_str("format", e.format);
-      set_str("resolution", e.resolution);
-      if (e.duration_us >= 0)
-	JS_SetPropertyStr(ctx, obj, "duration",
-			  JS_NewFloat64(ctx, (double)e.duration_us / 1e6));
-      if (e.size_bytes >= 0)
-	JS_SetPropertyStr(ctx, obj, "size", JS_NewInt64(ctx, e.size_bytes));
+      JS_SetPropertyStr(ctx, obj, "type", JS_NewString(ctx, TypeToString(e.type)));
+      set_str("name", e.name);
+      set_str("description", e.description);
+      set_str("image", e.image);
+      set_str("uri", e.uri);
       return obj;
-    }
-
-    // True when 'obj' has a callable property 'key'.
-    bool HasFunction(JSContext* ctx, JSValue obj, const char* key) {
-      Ref fn(ctx, JS_GetPropertyStr(ctx, obj, key));
-      if (JS_IsException(fn.get())) {
-	JS_FreeValue(ctx, JS_GetException(ctx));
-	return false;
-      }
-      return JS_IsFunction(ctx, fn.get());
     }
 
     // Converts the array of entry objects returned by browse().
@@ -282,7 +225,7 @@ namespace browse {
 	  error = "entry " + std::to_string(i + 1) + ": " + error;
 	  return false;
 	}
-	out.entries.push_back(std::move(e));
+	out.push_back(std::move(e));
       }
       return true;
     }
@@ -449,23 +392,10 @@ namespace browse {
       return false;
     }
 
-    const size_t first = out.entries.size();
-    if (!ToListing(ctx, result.get(), out, error))
-      return false;
-
-    // A source with a resolve() function can produce a URL for any of its
-    // items later on, so an entry that listed without one is still
-    // playable. Checked per call: the plugin may install resolve() while
-    // it runs.
-    if (HasFunction(ctx, source_, "resolve")) {
-      for (size_t i = first; i < out.entries.size(); i++)
-	if (!out.entries[i].IsFolder())
-	  out.entries[i].resolvable = true;
-    }
-    return true;
+    return ToListing(ctx, result.get(), out, error);
   }
 
-  bool JsSource::Resolve(const Entry& entry, std::string& url,
+  bool JsSource::Resolve(const Entry& entry, std::string& uri,
 			 std::string& error) {
     std::lock_guard<std::mutex> lock(plugin_->mutex);
     JSContext* ctx = plugin_->ctx;
@@ -473,10 +403,10 @@ namespace browse {
 
     Ref resolve(ctx, JS_GetPropertyStr(ctx, source_, "resolve"));
     if (!JS_IsFunction(ctx, resolve.get())) {
-      // No resolve(): the URL from browse() is all there is.
-      url = entry.res_url;
-      if (url.empty()) {
-	error = "this item has no playable resource";
+      // No resolve(): the uri from browse() is all there is.
+      uri = entry.uri;
+      if (uri.empty()) {
+	error = "this item has nothing to play";
 	return false;
       }
       return true;
@@ -491,21 +421,20 @@ namespace browse {
       return false;
     }
 
-    // Either the URL itself, or an object like the entries browse()
-    // returns, so a plugin can correct the format or the duration at the
-    // same time. Anything else means the plugin gave up on this item.
+    // Either the uri itself, or an entry object like the ones browse()
+    // returns. Anything else means the plugin gave up on this item.
     if (IsThenable(ctx, result.get())) {
       error = "resolve() returned a promise; plugin functions must be "
 	"synchronous";
       return false;
     }
     if (JS_IsString(result.get()))
-      url = ToStdString(ctx, result.get());
+      uri = ToStdString(ctx, result.get());
     else if (JS_IsObject(result.get()))
-      url = FieldString(ctx, result.get(), "url");
+      uri = FieldString(ctx, result.get(), "uri");
 
-    if (url.empty()) {
-      error = "resolve() did not return a URL";
+    if (uri.empty()) {
+      error = "resolve() did not return a uri";
       return false;
     }
     return true;

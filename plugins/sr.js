@@ -10,12 +10,12 @@ function fetchChannels() {
     const channels = JSON.parse(res.body).channels || [];
 
     return channels.map((ch) => ({
-	title: ch.name,
-	kind: "audio",
-	id: ch.id,
-	art: ch.imagetemplate,
-	url: ch.liveaudio.url,
-	genre: ch.tagline
+	id: String(ch.id),
+	type: "audio",
+	name: ch.name,
+	description: ch.tagline,
+	image: ch.imagetemplate,
+	uri: ch.liveaudio.url
     }));
 }
 

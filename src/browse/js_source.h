@@ -81,9 +81,9 @@ namespace browse {
 		std::string& error) override;
 
     // Calls the script's resolve(id, entry) when it has one, so a plugin
-    // serving signed URLs can hand out a fresh one per playback. Without
+    // serving signed URIs can hand out a fresh one per playback. Without
     // a resolve function this falls back to Source::Resolve().
-    bool Resolve(const Entry& entry, std::string& url,
+    bool Resolve(const Entry& entry, std::string& uri,
 		 std::string& error) override;
 
   private:

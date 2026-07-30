@@ -21,46 +21,43 @@ std::string HostOf(const std::string& url) {
   return u.host;
 }
 
-Entry::Kind KindOf(const upnp::DidlObject& o) {
+Entry::Type TypeOf(const upnp::DidlObject& o) {
   if (o.container)
-    return Entry::Kind::Folder;
+    return Entry::Type::Folder;
   if (o.IsAudio())
-    return Entry::Kind::Audio;
+    return Entry::Type::Audio;
   if (o.IsVideo())
-    return Entry::Kind::Video;
+    return Entry::Type::Video;
   if (o.IsImage())
-    return Entry::Kind::Image;
-  return Entry::Kind::Other;
+    return Entry::Type::Image;
+  return Entry::Type::Other;
 }
 
-// protocolInfo is "http-get:*:video/x-matroska:DLNA...."; the MIME type in
-// the third field is the useful part.
-std::string MimeOf(const std::string& protocol_info) {
-  size_t a = protocol_info.find(':');
-  size_t b = (a == std::string::npos) ? a : protocol_info.find(':', a + 1);
-  size_t c = (b == std::string::npos) ? b : protocol_info.find(':', b + 1);
-  if (b == std::string::npos)
-    return {};
-  return protocol_info.substr(b + 1,
-    (c == std::string::npos ? protocol_info.size() : c) - b - 1);
+// DIDL scatters its metadata over half a dozen elements; the entry has one
+// description line, so pick the ones a viewer actually reads.
+std::string DescriptionOf(const upnp::DidlObject& o) {
+  std::string desc;
+  auto add = [&desc](const std::string& value) {
+    if (!value.empty())
+      desc += (desc.empty() ? "" : "  -  ") + value;
+  };
+  add(o.artist);
+  add(o.album);
+  if (desc.empty()) {
+    add(o.genre);
+    add(o.date);
+  }
+  return desc;
 }
 
 Entry Convert(const upnp::DidlObject& o) {
   Entry e;
   e.id = o.id;
-  e.title = o.title;
-  e.kind = KindOf(o);
-  e.child_count = o.child_count;
-  e.artist = o.artist;
-  e.album = o.album;
-  e.genre = o.genre;
-  e.date = o.date;
-  e.art_url = o.ArtUrl();
-  e.format = MimeOf(o.protocol_info);
-  e.res_url = o.res_url;
-  e.duration_us = o.duration_us;
-  e.size_bytes = o.size_bytes;
-  e.resolution = o.resolution;
+  e.type = TypeOf(o);
+  e.name = o.title;
+  e.description = DescriptionOf(o);
+  e.image = o.ArtUrl();  // absolute http URL, or ""
+  e.uri = o.res_url;
   return e;
 }
 
@@ -80,9 +77,9 @@ bool DlnaSource::Browse(const std::string& id, Listing& out,
   upnp::BrowseResult result;
   if (!upnp::Browse(server_, id, result, error))
     return false;
-  out.entries.reserve(result.objects.size());
+  out.reserve(result.objects.size());
   for (const upnp::DidlObject& o : result.objects)
-    out.entries.push_back(Convert(o));
+    out.push_back(Convert(o));
   return true;
 }
 

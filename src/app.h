@@ -60,8 +60,8 @@ private:
   // instant and restores the selection.
   struct BrowseLevel {
     std::string id;
-    std::string title;
-    std::vector<browse::Entry> entries;
+    std::string name;
+    browse::Listing entries;
     int selection = 0;
   };
 
@@ -72,9 +72,9 @@ private:
     Rml::String detail;
   };
   struct EntryRow {
-    Rml::String icon;   // glyph for the kind of entry
-    Rml::String title;
-    Rml::String meta;   // duration / child count / codec hints
+    Rml::String icon;   // glyph for the type of entry
+    Rml::String name;
+    Rml::String description;
     bool folder = false;
   };
 
@@ -96,7 +96,7 @@ private:
   void OpenSource(int index);            // browse the root of a source
   void EnterContainer(const browse::Entry& entry);
   void LeaveContainer();                 // back one level (or to sources)
-  void RequestBrowse(const std::string& id, const std::string& title);
+  void RequestBrowse(const std::string& id, const std::string& name);
   void RebuildEntryRows();
   void RebuildDetail();
   void RebuildCrumb();
@@ -124,14 +124,14 @@ private:
   void ShowToast(const std::string& text);
 
   // --- Artwork -----------------------------------------------------------
-  // Cover URLs in the metadata are either plain http URLs or local file
-  // paths. Local paths are bound directly; RmlUi only loads textures
-  // through the file interface, so the worker downloads each http URL into
-  // a small on-disk cache and the UI binds the cached path.
+  // Entry::image is a URI: file:// (or a bare path) for local artwork,
+  // http(s):// for remote. RmlUi only loads textures through the file
+  // interface, so local ones are bound directly and the worker downloads
+  // each remote one into a small on-disk cache that the UI then binds.
   // Returns the displayable path, or "" while a download is (or has been
   // scheduled to be) fetched in the background, or if it failed.
-  std::string ArtPathFor(const std::string& url);
-  void RefreshArtBindings();       // re-resolve detail/now-playing art
+  std::string ImagePathFor(const std::string& uri);
+  void RefreshImageBindings();     // re-resolve detail/now-playing artwork
 
   // Data model bound state (main thread only).
   Rml::DataModelHandle model_;
@@ -141,9 +141,8 @@ private:
   Rml::String bind_crumb_;        // breadcrumb of the browse path
   Rml::String bind_source_name_;  // topbar: connected source
   Rml::String bind_clock_;
-  Rml::String bind_detail_title_;
-  Rml::String bind_detail_meta_;
-  Rml::String bind_detail_desc_;
+  Rml::String bind_detail_name_;
+  Rml::String bind_detail_description_;
   Rml::String bind_player_status_;
   bool bind_busy_ = false;         // a browse/discovery is in flight
   bool bind_watching_ = false;     // full-screen playback, chrome hidden
@@ -151,8 +150,8 @@ private:
   bool bind_watch_audio_ = false;  // audio-only: persistent now-playing card
   bool bind_watch_paused_ = false;
   bool bind_watch_seekable_ = false;
-  Rml::String bind_watch_title_;
-  Rml::String bind_watch_meta_;
+  Rml::String bind_watch_name_;
+  Rml::String bind_watch_description_;
   Rml::String bind_watch_time_;
   Rml::String bind_watch_progress_ = "0%"; // data-style-width; never empty
   // Codec lines shown in the watch bar: the label of the video and audio
@@ -163,8 +162,8 @@ private:
   Rml::String bind_watch_atrack_;
   bool bind_watch_multi_video_ = false;
   bool bind_watch_multi_audio_ = false;
-  Rml::String bind_detail_art_;    // local image path, "" = none
-  Rml::String bind_np_art_;        // now-playing artwork path, "" = none
+  Rml::String bind_detail_image_;  // local image path, "" = none
+  Rml::String bind_watch_image_;   // now-playing artwork path, "" = none
 
   std::vector<SourceRow> source_rows_;
   std::vector<EntryRow> entry_rows_;
@@ -201,21 +200,21 @@ private:
     bool browse_ready = false;
     uint32_t browse_request = 0;    // matches browse_request_ or is stale
     std::string browse_id;
-    std::string browse_title;
+    std::string browse_name;
     browse::Listing browse;
     std::string browse_error;
     bool play_ready = false;
     bool play_ok = false;
     std::string play_error;
-    // url -> cached local path ("" = download failed)
-    std::vector<std::pair<std::string, std::string>> art;
+    // image uri -> cached local path ("" = download failed)
+    std::vector<std::pair<std::string, std::string>> images;
   };
   Pending pending_;
 
   // Artwork cache (main thread).
-  std::string art_dir_;                          // "" = cache unavailable
-  std::map<std::string, std::string> art_paths_; // url -> path ("" = failed)
-  std::set<std::string> art_inflight_;
+  std::string image_dir_;                          // "" = cache unavailable
+  std::map<std::string, std::string> image_paths_; // uri -> path ("" = failed)
+  std::set<std::string> image_inflight_;
   uint32_t browse_request_ = 0;     // id of the browse we are waiting for
   std::atomic<int> busy_ops_{0};
 

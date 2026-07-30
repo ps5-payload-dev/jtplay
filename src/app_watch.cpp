@@ -22,16 +22,16 @@ void App::PlayEntry(const browse::Entry& entry) {
   busy_ops_++;
   PostTask([this, item, source] {
     std::string error;
-    std::string url = item.res_url;
+    std::string uri = item.uri;
     bool ok;
     if (source)
-      ok = source->Resolve(item, url, error);
+      ok = source->Resolve(item, uri, error);
     else
-      ok = !url.empty();
+      ok = !uri.empty();
     if (ok)
-      ok = player_->Open(url, error);
+      ok = player_->Open(uri, error);
     else if (error.empty())
-      error = "this item has no playable resource";
+      error = "this item has nothing to play";
     {
       std::lock_guard<std::mutex> lock(pending_.mutex);
       pending_.play_ready = true;
@@ -45,16 +45,8 @@ void App::PlayEntry(const browse::Entry& entry) {
 void App::EnterWatch(const browse::Entry& entry) {
   bind_watching_ = true;
   bind_watch_audio_ = entry.IsAudio();
-  bind_watch_title_ = entry.title.empty() ? "(untitled)" : entry.title;
-
-  std::string meta;
-  if (!entry.artist.empty())
-    meta = entry.artist;
-  if (!entry.album.empty())
-    meta += (meta.empty() ? "" : "  -  ") + entry.album;
-  if (meta.empty() && !entry.resolution.empty())
-    meta = entry.resolution;
-  bind_watch_meta_ = meta;
+  bind_watch_name_ = entry.name.empty() ? "(untitled)" : entry.name;
+  bind_watch_description_ = entry.description;
 
   bind_watch_paused_ = false;
   bind_watch_time_ = "";
@@ -65,8 +57,8 @@ void App::EnterWatch(const browse::Entry& entry) {
   bind_watch_multi_audio_ = false;
   model_.DirtyVariable("watching");
   model_.DirtyVariable("watch_audio");
-  model_.DirtyVariable("watch_title");
-  model_.DirtyVariable("watch_meta");
+  model_.DirtyVariable("watch_name");
+  model_.DirtyVariable("watch_description");
   model_.DirtyVariable("watch_paused");
   model_.DirtyVariable("watch_time");
   model_.DirtyVariable("watch_progress");
@@ -74,7 +66,7 @@ void App::EnterWatch(const browse::Entry& entry) {
   model_.DirtyVariable("watch_atrack");
   model_.DirtyVariable("watch_multi_video");
   model_.DirtyVariable("watch_multi_audio");
-  RefreshArtBindings();
+  RefreshImageBindings();
   ShowWatchInfo(kWatchInfoSec);
 }
 
@@ -83,7 +75,7 @@ void App::ExitWatch() {
   bind_info_visible_ = false;
   model_.DirtyVariable("watching");
   model_.DirtyVariable("info_visible");
-  RefreshArtBindings();
+  RefreshImageBindings();
 }
 
 void App::StopPlayback() {
@@ -226,7 +218,7 @@ bool App::PlayNeighbor(int direction) {
 
   for (int i = index + direction; i >= 0 && i < (int)level->entries.size(); i += direction) {
     const browse::Entry& e = level->entries[i];
-    if (!e.IsPlayable() || e.IsImage())
+    if (e.IsFolder() || e.IsImage())
       continue;
     sel_entry_ = i;
     model_.DirtyVariable("sel_entry");

@@ -15,22 +15,12 @@ namespace {
 // A short glyph for the entry list; the emoji font is loaded as a fallback
 // face, so these render everywhere.
 Rml::String IconFor(const browse::Entry& e) {
-  switch (e.kind) {
-  case browse::Entry::Kind::Folder: return "📁";
-  case browse::Entry::Kind::Audio:  return "🎵";
-  case browse::Entry::Kind::Video:  return "🎬";
-  case browse::Entry::Kind::Image:  return "🖼";
+  switch (e.type) {
+  case browse::Entry::Type::Folder: return "📁";
+  case browse::Entry::Type::Audio:  return "🎵";
+  case browse::Entry::Type::Video:  return "🎬";
+  case browse::Entry::Type::Image:  return "🖼";
   default:                          return "📄";
-  }
-}
-
-const char* KindLabel(const browse::Entry& e) {
-  switch (e.kind) {
-  case browse::Entry::Kind::Folder: return "Folder";
-  case browse::Entry::Kind::Audio:  return "Audio";
-  case browse::Entry::Kind::Video:  return "Video";
-  case browse::Entry::Kind::Image:  return "Image";
-  default:                          return "Item";
   }
 }
 
@@ -147,7 +137,7 @@ void App::OpenSource(int index) {
   RequestBrowse(current_source_->RootId(), current_source_->Name());
 }
 
-void App::RequestBrowse(const std::string& id, const std::string& title) {
+void App::RequestBrowse(const std::string& id, const std::string& name) {
   if (!current_source_)
     return;
 
@@ -155,7 +145,7 @@ void App::RequestBrowse(const std::string& id, const std::string& title) {
   const browse::SourcePtr source = current_source_;
 
   busy_ops_++;
-  PostTask([this, request, source, id, title] {
+  PostTask([this, request, source, id, name] {
     browse::Listing result;
     std::string error;
     source->Browse(id, result, error);
@@ -164,7 +154,7 @@ void App::RequestBrowse(const std::string& id, const std::string& title) {
       pending_.browse_ready = true;
       pending_.browse_request = request;
       pending_.browse_id = id;
-      pending_.browse_title = title;
+      pending_.browse_name = name;
       pending_.browse = std::move(result);
       pending_.browse_error = error;
     }
@@ -175,7 +165,7 @@ void App::RequestBrowse(const std::string& id, const std::string& title) {
 void App::EnterContainer(const browse::Entry& entry) {
   if (BrowseLevel* level = CurrentLevel())
     level->selection = sel_entry_;
-  RequestBrowse(entry.id, entry.title);
+  RequestBrowse(entry.id, entry.name);
 }
 
 void App::LeaveContainer() {
@@ -204,22 +194,9 @@ void App::RebuildEntryRows() {
     for (const browse::Entry& e : level->entries) {
       EntryRow row;
       row.icon = IconFor(e);
-      row.title = e.title.empty() ? "(untitled)" : e.title;
+      row.name = e.name.empty() ? "(untitled)" : e.name;
+      row.description = e.description;
       row.folder = e.IsFolder();
-      if (e.IsFolder()) {
-        if (e.child_count >= 0)
-          row.meta = std::to_string(e.child_count) +
-            (e.child_count == 1 ? " entry" : " entries");
-      } else {
-        std::string meta;
-        if (e.duration_us > 0)
-          meta = FormatTime(e.duration_us);
-        if (!e.resolution.empty())
-          meta += (meta.empty() ? "" : "  -  ") + e.resolution;
-        if (meta.empty() && e.size_bytes >= 0)
-          meta = FormatSize(e.size_bytes);
-        row.meta = meta;
-      }
       entry_rows_.push_back(std::move(row));
     }
   }
@@ -235,7 +212,7 @@ void App::RebuildCrumb() {
   for (const BrowseLevel& level : path_) {
     if (!crumb.empty())
       crumb += "  ›  ";
-    crumb += level.title;
+    crumb += level.name;
   }
   bind_crumb_ = crumb;
   model_.DirtyVariable("crumb");
@@ -244,42 +221,15 @@ void App::RebuildCrumb() {
 void App::RebuildDetail() {
   const browse::Entry* e = SelectedEntry();
   if (!e) {
-    bind_detail_title_.clear();
-    bind_detail_meta_.clear();
-    bind_detail_desc_.clear();
+    bind_detail_name_.clear();
+    bind_detail_description_.clear();
   } else {
-    bind_detail_title_ = e->title;
-
-    std::string meta = KindLabel(*e);
-    if (e->IsFolder()) {
-      if (e->child_count >= 0)
-        meta += "  -  " + std::to_string(e->child_count) +
-          (e->child_count == 1 ? " entry" : " entries");
-    } else {
-      if (e->duration_us > 0)
-        meta += "  -  " + FormatTime(e->duration_us);
-      if (e->size_bytes >= 0)
-        meta += "  -  " + FormatSize(e->size_bytes);
-    }
-    bind_detail_meta_ = meta;
-
-    std::string desc;
-    auto add = [&desc](const char* label, const std::string& value) {
-      if (!value.empty())
-        desc += std::string(label) + ": " + value + "\n";
-    };
-    add("Artist", e->artist);
-    add("Album", e->album);
-    add("Genre", e->genre);
-    add("Date", e->date);
-    add("Resolution", e->resolution);
-    add("Format", e->format);
-    bind_detail_desc_ = desc;
+    bind_detail_name_ = e->name;
+    bind_detail_description_ = e->description;
   }
-  model_.DirtyVariable("detail_title");
-  model_.DirtyVariable("detail_meta");
-  model_.DirtyVariable("detail_desc");
-  RefreshArtBindings();
+  model_.DirtyVariable("detail_name");
+  model_.DirtyVariable("detail_description");
+  RefreshImageBindings();
 }
 
 void App::MoveSelection(int delta) {
@@ -297,13 +247,10 @@ void App::ActivateSelection() {
   const browse::Entry* e = SelectedEntry();
   if (!e)
     return;
-  if (e->IsFolder()) {
+  if (e->IsFolder())
     EnterContainer(*e);
-  } else if (e->IsPlayable()) {
+  else
     PlayEntry(*e);
-  } else {
-    ShowToast("This item has nothing to play");
-  }
 }
 
 void App::HandleKeyBrowse(Rml::Event& event, int key) {

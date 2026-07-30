@@ -45,7 +45,7 @@ bool App::Initialize(Rml::Context* context, const Options& options, std::string&
   // Artwork cache directory; if it can't be created, art is simply skipped.
   if (!options.cache_dir.empty()) {
     if (::mkdir(options.cache_dir.c_str(), 0755) == 0 || errno == EEXIST)
-      art_dir_ = options.cache_dir;
+      image_dir_ = options.cache_dir;
     else
       Rml::Log::Message(Rml::Log::LT_WARNING,
         "Cannot create cache directory '%s' (%s); artwork disabled",
@@ -58,7 +58,7 @@ bool App::Initialize(Rml::Context* context, const Options& options, std::string&
     ::mkdir(dir.c_str(), 0755);
     dir += "/jtplay";
     if (::mkdir(dir.c_str(), 0755) == 0 || errno == EEXIST)
-      art_dir_ = dir;
+      image_dir_ = dir;
   }
 
   providers_.push_back(std::make_unique<browse::FsProvider>());
@@ -147,8 +147,8 @@ bool App::SetupDataModel(Rml::Context* context, std::string& error) {
 
   if (auto row = ctor.RegisterStruct<EntryRow>()) {
     row.RegisterMember("icon", &EntryRow::icon);
-    row.RegisterMember("title", &EntryRow::title);
-    row.RegisterMember("meta", &EntryRow::meta);
+    row.RegisterMember("name", &EntryRow::name);
+    row.RegisterMember("description", &EntryRow::description);
     row.RegisterMember("folder", &EntryRow::folder);
   }
   ctor.RegisterArray<std::vector<EntryRow>>();
@@ -169,9 +169,8 @@ bool App::SetupDataModel(Rml::Context* context, std::string& error) {
   ctor.Bind("entry_count", &entry_count_);
   ctor.Bind("sel_entry", &sel_entry_);
 
-  ctor.Bind("detail_title", &bind_detail_title_);
-  ctor.Bind("detail_meta", &bind_detail_meta_);
-  ctor.Bind("detail_desc", &bind_detail_desc_);
+  ctor.Bind("detail_name", &bind_detail_name_);
+  ctor.Bind("detail_description", &bind_detail_description_);
   ctor.Bind("player_status", &bind_player_status_);
 
   ctor.Bind("watching", &bind_watching_);
@@ -179,16 +178,16 @@ bool App::SetupDataModel(Rml::Context* context, std::string& error) {
   ctor.Bind("watch_audio", &bind_watch_audio_);
   ctor.Bind("watch_paused", &bind_watch_paused_);
   ctor.Bind("watch_seekable", &bind_watch_seekable_);
-  ctor.Bind("watch_title", &bind_watch_title_);
-  ctor.Bind("watch_meta", &bind_watch_meta_);
+  ctor.Bind("watch_name", &bind_watch_name_);
+  ctor.Bind("watch_description", &bind_watch_description_);
   ctor.Bind("watch_time", &bind_watch_time_);
   ctor.Bind("watch_progress", &bind_watch_progress_);
   ctor.Bind("watch_vtrack", &bind_watch_vtrack_);
   ctor.Bind("watch_atrack", &bind_watch_atrack_);
   ctor.Bind("watch_multi_video", &bind_watch_multi_video_);
   ctor.Bind("watch_multi_audio", &bind_watch_multi_audio_);
-  ctor.Bind("detail_art", &bind_detail_art_);
-  ctor.Bind("np_art", &bind_np_art_);
+  ctor.Bind("detail_image", &bind_detail_image_);
+  ctor.Bind("watch_image", &bind_watch_image_);
 
   // Mouse/touch support on the lists.
   ctor.BindEventCallback("select_source",
@@ -289,8 +288,8 @@ void App::Update() {
         } else {
           BrowseLevel level;
           level.id = pending_.browse_id;
-          level.title = pending_.browse_title;
-          level.entries = std::move(pending_.browse.entries);
+          level.name = pending_.browse_name;
+          level.entries = std::move(pending_.browse);
           path_.push_back(std::move(level));
           sel_entry_ = 0;
           RebuildEntryRows();
@@ -311,13 +310,13 @@ void App::Update() {
       }
     }
 
-    if (!pending_.art.empty()) {
-      for (auto& done : pending_.art) {
-        art_paths_[done.first] = done.second;
-        art_inflight_.erase(done.first);
+    if (!pending_.images.empty()) {
+      for (auto& done : pending_.images) {
+        image_paths_[done.first] = done.second;
+        image_inflight_.erase(done.first);
       }
-      pending_.art.clear();
-      RefreshArtBindings();
+      pending_.images.clear();
+      RefreshImageBindings();
     }
   }
 
@@ -450,41 +449,43 @@ const char* SniffImageExt(const std::string& b) {
   return nullptr;
 }
 
-constexpr size_t kMaxArtBytes = 12 * 1024 * 1024;
+constexpr size_t kMaxImageBytes = 12 * 1024 * 1024;
 
 } // namespace
 
-std::string App::ArtPathFor(const std::string& url) {
-  if (url.empty())
+std::string App::ImagePathFor(const std::string& uri) {
+  if (uri.empty())
     return {};
 
-  // Local paths (filesystem sources) need no download; RmlUi loads them
-  // through the file interface directly.
-  if (url[0] == '/')
-    return url;
+  // Local artwork needs no download; RmlUi loads it through the file
+  // interface directly. Both "file:///path" and a bare "/path" are taken.
+  if (uri.compare(0, 7, "file://") == 0)
+    return uri.substr(7);
+  if (uri[0] == '/')
+    return uri;
 
-  if (art_dir_.empty())
+  if (image_dir_.empty())
     return {};
 
-  auto it = art_paths_.find(url);
-  if (it != art_paths_.end())
+  auto it = image_paths_.find(uri);
+  if (it != image_paths_.end())
     return it->second; // may be "" if the download failed; don't retry
 
-  if (!art_inflight_.insert(url).second)
+  if (!image_inflight_.insert(uri).second)
     return {};
 
-  const std::string dir = art_dir_;
-  PostTask([this, url, dir]() {
+  const std::string dir = image_dir_;
+  PostTask([this, uri, dir]() {
     std::string path; // stays empty on failure
 
     upnp::HttpResponse resp;
     std::string error;
-    if (upnp::HttpGet(url, resp, error) && resp.status == 200 &&
-        !resp.body.empty() && resp.body.size() <= kMaxArtBytes) {
+    if (upnp::HttpGet(uri, resp, error) && resp.status == 200 &&
+        !resp.body.empty() && resp.body.size() <= kMaxImageBytes) {
       if (const char* ext = SniffImageExt(resp.body)) {
         char name[64];
         std::snprintf(name, sizeof(name), "/art-%016llx.%s",
-                      (unsigned long long)HashUrl(url), ext);
+                      (unsigned long long)HashUrl(uri), ext);
         const std::string full = dir + name;
         if (FILE* f = std::fopen(full.c_str(), "wb")) {
           const bool ok =
@@ -499,30 +500,30 @@ std::string App::ArtPathFor(const std::string& url) {
     }
 
     std::lock_guard<std::mutex> lock(pending_.mutex);
-    pending_.art.emplace_back(url, path);
+    pending_.images.emplace_back(uri, path);
   });
 
   return {};
 }
 
-void App::RefreshArtBindings() {
+void App::RefreshImageBindings() {
   // Details pane follows the browse selection.
   Rml::String detail;
   if (view_ == View::Browse) {
     if (const browse::Entry* entry = SelectedEntry())
-      detail = ArtPathFor(entry->art_url);
+      detail = ImagePathFor(entry->image);
   }
-  if (bind_detail_art_ != detail) {
-    bind_detail_art_ = detail;
-    model_.DirtyVariable("detail_art");
+  if (bind_detail_image_ != detail) {
+    bind_detail_image_ = detail;
+    model_.DirtyVariable("detail_image");
   }
 
   // Now-playing card / transport bar follows the playing item.
-  Rml::String np;
+  Rml::String watch;
   if (bind_watching_)
-    np = ArtPathFor(playing_.art_url);
-  if (bind_np_art_ != np) {
-    bind_np_art_ = np;
-    model_.DirtyVariable("np_art");
+    watch = ImagePathFor(playing_.image);
+  if (bind_watch_image_ != watch) {
+    bind_watch_image_ = watch;
+    model_.DirtyVariable("watch_image");
   }
 }
