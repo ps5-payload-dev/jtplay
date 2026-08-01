@@ -159,6 +159,7 @@ bool App::SetupDataModel(Rml::Context* context, std::string& error) {
   ctor.Bind("source_name", &bind_source_name_);
   ctor.Bind("clock", &bind_clock_);
   ctor.Bind("busy", &bind_busy_);
+  ctor.Bind("launch_status", &bind_launch_status_);
 
   ctor.Bind("sources", &source_rows_);
   ctor.Bind("source_count", &source_count_);
@@ -252,6 +253,23 @@ void App::Update() {
     }
   }
 
+  // How far an in-flight launch has got. Only shown once the open has been
+  // slow enough to be worth mentioning.
+  {
+    Rml::String status;
+    if (launch_request_ && now >= launch_visible_at_) {
+      switch (launch_phase_.load()) {
+      case kLaunchResolving: status = "Resolving..."; break;
+      case kLaunchOpening:   status = "Opening stream..."; break;
+      default:               break;
+      }
+    }
+    if (bind_launch_status_ != status) {
+      bind_launch_status_ = status;
+      model_.DirtyVariable("launch_status");
+    }
+  }
+
   // Pick up worker results.
   {
     std::lock_guard<std::mutex> lock(pending_.mutex);
@@ -301,11 +319,20 @@ void App::Update() {
 
     if (pending_.play_ready) {
       pending_.play_ready = false;
-      if (!pending_.play_ok) {
+      if (!launch_request_ || pending_.play_request != launch_request_) {
+        // Abandoned while it was opening (circle, or another item started).
+        // If it did open, take it down again rather than showing it.
+        if (pending_.play_ok)
+          PostTask([this] { player_->Stop(); });
+      } else if (!pending_.play_ok) {
         ShowToast(pending_.play_error.empty() ? "Playback failed"
                                               : pending_.play_error);
-        if (bind_watching_)
-          ExitWatch();
+        CancelLaunch();
+      } else {
+        // The player is running: only now is there anything to look at.
+        playing_ = launch_entry_;
+        CancelLaunch();
+        EnterWatch(playing_);
       }
     }
 

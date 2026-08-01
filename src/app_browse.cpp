@@ -120,6 +120,7 @@ const browse::Entry* App::SelectedEntry() const {
 void App::OpenSource(int index) {
   if (index < 0 || index >= (int)sources_.size())
     return;
+  CancelLaunch();
   current_source_ = sources_[index];
   path_.clear();
   sel_entry_ = 0;
@@ -163,12 +164,14 @@ void App::RequestBrowse(const std::string& id, const std::string& name) {
 }
 
 void App::EnterContainer(const browse::Entry& entry) {
+  CancelLaunch(); // the row it was started from is about to go away
   if (BrowseLevel* level = CurrentLevel())
     level->selection = sel_entry_;
   RequestBrowse(entry.id, entry.name);
 }
 
 void App::LeaveContainer() {
+  CancelLaunch();    // ... otherwise playback pops up over another folder
   browse_request_++; // invalidate any browse that is still in flight
   if (path_.size() <= 1) {
     // At the root: back to the source list.
@@ -279,7 +282,13 @@ void App::HandleKeyBrowse(Rml::Event& event, int key) {
     break;
   case Rml::Input::KI_BACK:   // backspace / circle
   case Rml::Input::KI_ESCAPE:
-    LeaveContainer();
+    // While something is opening, back cancels that rather than the folder.
+    if (launch_request_) {
+      CancelLaunch();
+      ShowToast("Cancelled");
+    } else {
+      LeaveContainer();
+    }
     break;
   default:
     return;

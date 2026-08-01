@@ -108,6 +108,9 @@ private:
 
   // --- Playback ----------------------------------------------------------
   void PlayEntry(const browse::Entry& entry);
+  // Abandons an in-flight PlayEntry: the result that eventually arrives is
+  // discarded (and the stream torn down again if it did open).
+  void CancelLaunch();
   void StopPlayback();                   // posts the stop; exits watch UI
   void EnterWatch(const browse::Entry& entry);
   void ExitWatch();
@@ -145,6 +148,10 @@ private:
   Rml::String bind_detail_description_;
   Rml::String bind_player_status_;
   bool bind_busy_ = false;         // a browse/discovery is in flight
+  // Phase of an in-flight launch ("Opening stream..."), or "" when idle.
+  // The browse view's own feedback is the topbar busy indicator, which
+  // keeps running because the shell is not hidden until the player is up.
+  Rml::String bind_launch_status_;
   bool bind_watching_ = false;     // full-screen playback, chrome hidden
   bool bind_info_visible_ = false; // watch info bar shown (auto-hides)
   bool bind_watch_audio_ = false;  // audio-only: persistent now-playing card
@@ -204,6 +211,7 @@ private:
     browse::Listing browse;
     std::string browse_error;
     bool play_ready = false;
+    uint32_t play_request = 0;      // matches launch_request_ or is stale
     bool play_ok = false;
     std::string play_error;
     // image uris whose fetch has finished; the paths live in artcache
@@ -216,6 +224,16 @@ private:
   std::set<std::string> image_inflight_;
   uint32_t browse_request_ = 0;     // id of the browse we are waiting for
   std::atomic<int> busy_ops_{0};
+
+  // In-flight PlayEntry. The worker moves through the phases; the main
+  // thread only reads them, and stops caring as soon as launch_request_ no
+  // longer matches the result that comes back.
+  enum LaunchPhase { kLaunchIdle = 0, kLaunchResolving, kLaunchOpening };
+  std::atomic<int> launch_phase_{kLaunchIdle};
+  uint32_t launch_seq_ = 0;         // ever-increasing ticket source
+  uint32_t launch_request_ = 0;     // ticket we are waiting for; 0 = idle
+  browse::Entry launch_entry_;      // item being opened
+  double launch_visible_at_ = 0.0;  // suppress the phase line before this
 
   double toast_deadline_ = 0.0;
   double info_deadline_ = 0.0;      // watch info bar auto-hide

@@ -11,35 +11,64 @@
 
 using namespace appdetail;
 
+// Starts an item. Nothing about the UI changes here: the browse list stays
+// up -- and with it the topbar busy indicator -- until the worker reports
+// that the player is running. Entering watch mode any earlier hides the
+// shell, and with it the only sign of life, for as long as the resolve and
+// the open take, which on a remote source is most of the wait.
 void App::PlayEntry(const browse::Entry& entry) {
-  playing_ = entry;
-  EnterWatch(entry);
+  CancelLaunch();
+
+  launch_entry_ = entry;
+  launch_request_ = ++launch_seq_;
+  launch_phase_ = kLaunchResolving;
+  launch_visible_at_ = Now() + kLaunchFeedbackSec;
 
   // Resolve and open on the worker: a source with expiring URLs mints one
   // here, as late as possible, and both steps may block on the network.
-  const browse::Entry item = playing_;
+  const browse::Entry item = entry;
   const browse::SourcePtr source = current_source_;
+  const uint32_t request = launch_request_;
   busy_ops_++;
-  PostTask([this, item, source] {
+  PostTask([this, item, source, request] {
     std::string error;
     std::string uri = item.uri;
     bool ok;
-    if (source)
+    if (source) {
+      launch_phase_ = kLaunchResolving;
       ok = source->Resolve(item, uri, error);
-    else
+    } else {
       ok = !uri.empty();
-    if (ok)
+    }
+    if (ok) {
+      launch_phase_ = kLaunchOpening;
       ok = player_->Open(uri, error);
-    else if (error.empty())
+    } else if (error.empty()) {
       error = "this item has nothing to play";
+    }
     {
       std::lock_guard<std::mutex> lock(pending_.mutex);
       pending_.play_ready = true;
+      pending_.play_request = request;
       pending_.play_ok = ok;
       pending_.play_error = error;
     }
     busy_ops_--;
   });
+}
+
+// The open itself is not interruptible, so cancelling only stops us caring:
+// the task runs to completion and Update() throws the result away (and
+// stops the stream again if it did open).
+void App::CancelLaunch() {
+  if (!launch_request_)
+    return;
+  launch_request_ = 0;
+  launch_phase_ = kLaunchIdle;
+  if (!bind_launch_status_.empty()) {
+    bind_launch_status_.clear();
+    model_.DirtyVariable("launch_status");
+  }
 }
 
 void App::EnterWatch(const browse::Entry& entry) {
@@ -79,6 +108,7 @@ void App::ExitWatch() {
 }
 
 void App::StopPlayback() {
+  CancelLaunch();
   ExitWatch();
   PostTask([this] { player_->Stop(); });
 }
@@ -205,10 +235,12 @@ bool App::PlayNeighbor(int direction) {
   if (!level)
     return false;
 
-  // Locate the playing item by id; the selection may have moved.
+  // Locate the playing item by id; the selection may have moved. While a
+  // launch is in flight that item is the reference, not the one on screen.
+  const std::string& from = launch_request_ ? launch_entry_.id : playing_.id;
   int index = -1;
   for (size_t i = 0; i < level->entries.size(); i++) {
-    if (level->entries[i].id == playing_.id) {
+    if (level->entries[i].id == from) {
       index = (int)i;
       break;
     }

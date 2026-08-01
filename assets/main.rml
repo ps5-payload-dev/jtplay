@@ -23,7 +23,6 @@
 					<span class="busy-dot busy-dot3" data-if="busy"/>
 				</span>
 				<span class="spacer"/>
-				<span class="player-status" data-if="player_status != ''">{{player_status}}</span>
 				<span class="clock">{{clock}}</span>
 			</div>
 
@@ -140,6 +139,14 @@
 					<span class="chip"><img class="key-icon" src="icons/options.png"/>&nbsp;Info</span>
 				</div>
 			</div>
+		</div>
+
+		<!-- Launching the next track without leaving watch mode. -->
+		<div id="launch-overlay" data-if="watching && launch_status != ''">
+			<span class="busy-dot busy-dot1"/>
+			<span class="busy-dot busy-dot2"/>
+			<span class="busy-dot busy-dot3"/>
+			<span class="launch-label">{{launch_status}}</span>
 		</div>
 
 		<div id="toast" data-if="toast != ''">{{toast}}</div>

@@ -19,6 +19,10 @@ inline constexpr float kSourceRowPitch = 96.0f + 12.0f;
 inline constexpr float kEntryRowPitch = 76.0f + 10.0f;
 
 inline constexpr double kToastSec = 4.0;
+// A local file opens in a few milliseconds; showing a spinner for one frame
+// on every launch just looks like a glitch, so the launch feedback only
+// appears once the open has taken at least this long.
+inline constexpr double kLaunchFeedbackSec = 0.3;
 inline constexpr double kWatchInfoSec = 5.0;      // watch info bar auto-hide
 inline constexpr int kDiscoveryWaitMs = 2500;
 

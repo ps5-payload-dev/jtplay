@@ -206,3 +206,26 @@ body.watching #shell {
 	border-radius: 10px;
 	margin-right: 28px;
 }
+
+/* ------------------------------------------------------------------ */
+/* Loading the next track from inside watch mode                      */
+/* ------------------------------------------------------------------ */
+
+#launch-overlay {
+	position: absolute;
+	top: 48px;
+	right: 56px;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8dp;
+	padding: 14px 26px;
+	background-color: #0a0e18cc;
+	border-radius: 10px;
+}
+
+#launch-overlay .launch-label {
+	margin-left: 10px;
+	font-size: 24px;
+	color: #e8edf7;
+}
