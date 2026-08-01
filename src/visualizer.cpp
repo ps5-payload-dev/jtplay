@@ -422,18 +422,6 @@ void Visualizer::Analyze(int64_t clock_us, float dt, bool paused)
 	{
 		since_beat_ = 0.f;
 		beat_flash_ = 1.f;
-		spin_ += 0.06f + 0.10f * bass_;
-
-		for (Pulse& p : pulses_)
-		{
-			if (p.life <= 0.f)
-			{
-				p.age = 0.f;
-				p.life = 1.15f;
-				p.strength = Clamp01(bass_ * 1.3f);
-				break;
-			}
-		}
 		for (Mote& m : motes_)
 		{
 			m.vy -= 0.020f * bass_;
@@ -444,21 +432,9 @@ void Visualizer::Analyze(int64_t clock_us, float dt, bool paused)
 	beat_flash_ = std::max(0.f, beat_flash_ - dt * 3.0f);
 }
 
-void Visualizer::UpdateMotion(float dt, int w, int h)
+void Visualizer::UpdateMotion(float dt)
 {
-	(void)w;
-	(void)h;
 	time_ += dt;
-	spin_ += dt * (0.045f + 0.20f * energy_);
-
-	for (Pulse& p : pulses_)
-	{
-		if (p.life <= 0.f)
-			continue;
-		p.age += dt;
-		if (p.age >= p.life)
-			p.life = 0.f;
-	}
 
 	const float lift = 1.f + 2.2f * energy_;
 	for (Mote& m : motes_)
@@ -647,7 +623,7 @@ void Visualizer::Render(SDL_Renderer* renderer, int w, int h, int64_t clock_us, 
 	dt = std::min(std::max(dt, 0.f), 0.1f);
 
 	Analyze(clock_us, dt, paused);
-	UpdateMotion(dt, w, h);
+	UpdateMotion(dt);
 
 	if (!EnsureTarget(renderer, w, h))
 		return;

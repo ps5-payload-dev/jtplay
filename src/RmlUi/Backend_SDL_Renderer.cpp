@@ -180,7 +180,7 @@ bool Backend::ProcessEvents(Rml::Context* context) {
       }
       break;
 
-    // DualSense touchpad click: same as Square (toggles the info bar).
+    // DualSense touchpad click: same as Square (next video track).
     case SDL_CONTROLLERBUTTONDOWN:
       if (ev.cbutton.button == SDL_CONTROLLER_BUTTON_TOUCHPAD) {
         context->ProcessKeyDown(Rml::Input::KI_SPACE, 0);

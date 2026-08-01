@@ -16,7 +16,7 @@ pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET
 pkg_check_modules(SDL2_IMAGE REQUIRED IMPORTED_TARGET SDL2_image)
 pkg_check_modules(TINYXML2 REQUIRED IMPORTED_TARGET tinyxml2)
 pkg_check_modules(CURL REQUIRED IMPORTED_TARGET libcurl)
-find_path(QUICKJS_INLCUDE_DIR NAMES quickjs.h PATH_SUFFIXES quickjs)
+find_path(QUICKJS_INCLUDE_DIR NAMES quickjs.h PATH_SUFFIXES quickjs)
 find_library(QUICKJS_LIBRARY NAMES quickjs PATH_SUFFIXES quickjs)
 
 add_executable(jtplay
@@ -42,7 +42,7 @@ add_executable(jtplay
 
 target_compile_options(jtplay PRIVATE -Wall -Werror)
 
-target_include_directories(jtplay PRIVATE ${QUICKJS_INLCUDE_DIR} src)
+target_include_directories(jtplay PRIVATE ${QUICKJS_INCLUDE_DIR} src)
 
 target_link_libraries(jtplay PRIVATE
     SDL2::SDL2

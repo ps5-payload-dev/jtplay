@@ -84,14 +84,6 @@ private:
 		void Flush(SDL_Renderer* renderer);
 	};
 
-	// Expanding circle spawned on a detected beat.
-	struct Pulse
-	{
-		float age = 0.f;    // seconds
-		float life = 0.f;   // seconds; <= 0 = slot free
-		float strength = 0.f;
-	};
-
 	// Drifting mote, nudged upward and outward by beats.
 	struct Mote
 	{
@@ -107,7 +99,7 @@ private:
 	// Copies the analysis window out of the ring buffer. Returns false when
 	// there is not enough history yet (start of a track, after a seek).
 	bool FetchWindow(int64_t clock_us, float* out);
-	void UpdateMotion(float dt, int w, int h);
+	void UpdateMotion(float dt);
 	// (Re)creates the offscreen target for a window of w x h.
 	bool EnsureTarget(SDL_Renderer* renderer, int w, int h);
 
@@ -143,8 +135,6 @@ private:
 
 	// --- motion (main thread) -----------------------------------------------
 	float time_ = 0.f;
-	float spin_ = 0.f;            // ring rotation, radians
-	Pulse pulses_[5];
 	std::vector<Mote> motes_;
 	uint32_t rng_ = 0x9e3779b9u;
 
