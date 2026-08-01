@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Minimal blocking HTTP/1.1 client, just enough for UPnP: fetching device
-// description documents and posting SOAP envelopes to control URLs. Media
-// itself is NOT transferred through this; playback hands the media URL
-// straight to libavformat, which has its own (much better) HTTP stack.
+// URL helpers plus the two requests UPnP needs: fetching a device
+// description and posting a SOAP envelope to a control URL. The transport
+// is net::HttpClient (libcurl), the same one the artwork cache and the
+// plugins use.
+//
+// Media is never fetched through here; playback hands the URL straight to
+// libavformat, which has its own HTTP stack.
 #ifndef UPNP_HTTP_H
 #define UPNP_HTTP_H
 
 #include <cstdint>
-#include <map>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace upnp {
 
@@ -30,19 +34,17 @@ std::string ResolveUrl(const std::string& base, const std::string& ref);
 
 struct HttpResponse {
   int status = 0;
-  std::map<std::string, std::string> headers; // keys lower-cased
   std::string body;
 };
 
-// One-shot request; opens a connection, sends, reads the full response,
-// closes. 'extra_headers' lines must be complete ("SOAPACTION: \"...\"") and
-// are sent verbatim. Returns false on connect/transport errors, with a
-// human-readable reason in 'error'. HTTP error statuses (4xx/5xx) return
-// true; the caller inspects response.status.
-bool HttpRequest(const std::string& method, const std::string& url,
-                 const std::string& extra_headers, const std::string& body,
-                 HttpResponse& response, std::string& error,
-                 int timeout_ms = 8000);
+using Headers = std::vector<std::pair<std::string, std::string>>;
+
+// One blocking request. Returns false on transport errors (DNS, connect,
+// timeout) with a reason in 'error'; an HTTP error status is a successful
+// request, reported in response.status. Blocking; worker thread only.
+bool HttpRequest(const char* method, const std::string& url,
+                 const Headers& headers, const std::string& body,
+                 HttpResponse& response, std::string& error);
 
 inline bool HttpGet(const std::string& url, HttpResponse& r, std::string& e) {
   return HttpRequest("GET", url, {}, {}, r, e);

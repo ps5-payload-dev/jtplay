@@ -33,9 +33,8 @@ public:
 
   struct Options {
     std::string assets_dir = "assets";   // directory containing main.rml
-    std::string cache_dir;               // artwork cache; "" = XDG default
-    std::string plugins_dir;             // JS plugin scripts; "" = none
-    std::vector<std::string> media_dirs; // extra local roots to browse
+    std::string cache_dir;             // artwork cache; "" = XDG default
+    std::string plugins_dir;           // JS plugin scripts; "" = none
   };
 
   // Creates the data model and loads <assets_dir>/main.rml. Must be called
@@ -83,9 +82,22 @@ private:
   // --- Worker ------------------------------------------------------------
   // Tasks run strictly in order on one background thread; that thread is
   // the only one allowed to call Source::Browse()/Provider::Discover() or
-  // player_->Open()/Stop().
+  // player_->Open()/Stop(). A task hands its result back with Reply(),
+  // whose callback runs on the main thread in the next Update() -- the
+  // only place the UI and the data model are touched.
   void PostTask(std::function<void()> task);
+  void Reply(std::function<void()> apply);
   void WorkerMain();
+  void RunReplies();
+
+  // Assigns a bound value and marks it dirty, but only if it changed.
+  template <typename T, typename U>
+  void Set(const char* name, T& slot, U&& value) {
+    if (slot == value)
+      return;
+    slot = std::forward<U>(value);
+    model_.DirtyVariable(name);
+  }
 
   // --- Sources view ------------------------------------------------------
   void StartDiscovery();
@@ -191,37 +203,19 @@ private:
   Rml::ElementDocument* document_ = nullptr;
   View view_ = View::Sources;
 
-  // Worker plumbing.
+  // Worker plumbing: jobs going out, results coming back.
   std::thread worker_;
   std::mutex tasks_mutex_;
   std::condition_variable tasks_cv_;
   std::deque<std::function<void()>> tasks_;
   std::atomic<bool> worker_running_{false};
-
-  // Results the worker leaves for Update() to pick up.
-  struct Pending {
-    std::mutex mutex;
-    bool sources_ready = false;
-    std::vector<browse::SourcePtr> sources;
-    std::string discover_error;
-    bool browse_ready = false;
-    uint32_t browse_request = 0;    // matches browse_request_ or is stale
-    std::string browse_id;
-    std::string browse_name;
-    browse::Listing browse;
-    std::string browse_error;
-    bool play_ready = false;
-    uint32_t play_request = 0;      // matches launch_request_ or is stale
-    bool play_ok = false;
-    std::string play_error;
-    // image uris whose fetch has finished; the paths live in artcache
-    std::vector<std::string> images;
-  };
-  Pending pending_;
+  std::mutex replies_mutex_;
+  std::deque<std::function<void()>> replies_;
 
   // Artwork (main thread). The cache itself is artcache; this is only the
   // set of URIs a worker task is already fetching, so the UI asks once.
   std::set<std::string> image_inflight_;
+  bool image_refresh_pending_ = false;
   uint32_t browse_request_ = 0;     // id of the browse we are waiting for
   std::atomic<int> busy_ops_{0};
 

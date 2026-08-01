@@ -82,6 +82,11 @@ void App::Shutdown() {
     if (worker_.joinable())
       worker_.join();
   }
+  {
+    // Nothing is left to apply them to.
+    std::lock_guard<std::mutex> lock(replies_mutex_);
+    replies_.clear();
+  }
 
   artcache::Shutdown(); // after the worker is joined; it calls Fetch()
 
@@ -109,6 +114,24 @@ void App::PostTask(std::function<void()> task) {
     tasks_.push_back(std::move(task));
   }
   tasks_cv_.notify_one();
+}
+
+// Worker thread: hands a result to the main thread. Replies are applied in
+// the order they were posted, so a result that has since been superseded
+// still arrives -- and is dropped by its own request-id check.
+void App::Reply(std::function<void()> apply) {
+  std::lock_guard<std::mutex> lock(replies_mutex_);
+  replies_.push_back(std::move(apply));
+}
+
+void App::RunReplies() {
+  std::deque<std::function<void()>> ready;
+  {
+    std::lock_guard<std::mutex> lock(replies_mutex_);
+    ready.swap(replies_);
+  }
+  for (std::function<void()>& apply : ready)
+    apply();
 }
 
 void App::WorkerMain() {
@@ -238,20 +261,10 @@ void App::Update() {
     std::tm tm = {};
     localtime_r(&t, &tm);
     std::snprintf(buf, sizeof(buf), "%02d:%02d", tm.tm_hour, tm.tm_min);
-    if (bind_clock_ != buf) {
-      bind_clock_ = buf;
-      model_.DirtyVariable("clock");
-    }
+    Set("clock", bind_clock_, Rml::String(buf));
   }
 
-  // Busy indicator.
-  {
-    const bool busy = busy_ops_.load() > 0;
-    if (bind_busy_ != busy) {
-      bind_busy_ = busy;
-      model_.DirtyVariable("busy");
-    }
-  }
+  Set("busy", bind_busy_, busy_ops_.load() > 0);
 
   // How far an in-flight launch has got. Only shown once the open has been
   // slow enough to be worth mentioning.
@@ -264,111 +277,27 @@ void App::Update() {
       default:               break;
       }
     }
-    if (bind_launch_status_ != status) {
-      bind_launch_status_ = status;
-      model_.DirtyVariable("launch_status");
-    }
+    Set("launch_status", bind_launch_status_, status);
   }
 
-  // Pick up worker results.
-  {
-    std::lock_guard<std::mutex> lock(pending_.mutex);
-
-    if (pending_.sources_ready) {
-      pending_.sources_ready = false;
-      sources_ = std::move(pending_.sources);
-      RebuildSourceRows();
-      if (sources_.empty()) {
-        bind_status_ = pending_.discover_error.empty()
-          ? "No media sources found."
-          : pending_.discover_error;
-      } else {
-        bind_status_ = std::to_string(sources_.size()) +
-          (sources_.size() == 1 ? " source found" : " sources found");
-        if (!pending_.discover_error.empty())
-          bind_status_ += "  -  " + pending_.discover_error;
-      }
-      model_.DirtyVariable("status");
-    }
-
-    if (pending_.browse_ready) {
-      pending_.browse_ready = false;
-      if (pending_.browse_request == browse_request_) {
-        if (!pending_.browse_error.empty()) {
-          ShowToast(pending_.browse_error);
-          // A failed root browse drops back to the source list.
-          if (path_.empty()) {
-            view_ = View::Sources;
-            bind_view_ = "sources";
-            model_.DirtyVariable("view");
-          }
-        } else {
-          BrowseLevel level;
-          level.id = pending_.browse_id;
-          level.name = pending_.browse_name;
-          level.entries = std::move(pending_.browse);
-          path_.push_back(std::move(level));
-          sel_entry_ = 0;
-          RebuildEntryRows();
-          RebuildCrumb();
-          RebuildDetail();
-          scroll_entries_pending_ = true;
-        }
-      }
-    }
-
-    if (pending_.play_ready) {
-      pending_.play_ready = false;
-      if (!launch_request_ || pending_.play_request != launch_request_) {
-        // Abandoned while it was opening (circle, or another item started).
-        // If it did open, take it down again rather than showing it.
-        if (pending_.play_ok)
-          PostTask([this] { player_->Stop(); });
-      } else if (!pending_.play_ok) {
-        ShowToast(pending_.play_error.empty() ? "Playback failed"
-                                              : pending_.play_error);
-        CancelLaunch();
-      } else {
-        // The player is running: only now is there anything to look at.
-        playing_ = launch_entry_;
-        CancelLaunch();
-        EnterWatch(playing_);
-      }
-    }
-
-    if (!pending_.images.empty()) {
-      // The result itself already sits in artcache; all the UI has to do is
-      // stop treating the URI as in flight and ask again.
-      for (const std::string& uri : pending_.images)
-        image_inflight_.erase(uri);
-      pending_.images.clear();
-      RefreshImageBindings();
-    }
+  RunReplies();
+  if (image_refresh_pending_) {
+    image_refresh_pending_ = false;
+    RefreshImageBindings();
   }
 
-  // Player status in the top bar.
-  {
-    const Rml::String status = player_->StatusText();
-    if (bind_player_status_ != status) {
-      bind_player_status_ = status;
-      model_.DirtyVariable("player_status");
-    }
-  }
+  Set("player_status", bind_player_status_, player_->StatusText());
 
   if (bind_watching_) {
     UpdateWatchOverlay();
     if (player_->IsPlaying() && player_->AtEnd())
       HandlePlaybackEnd();
-    if (bind_info_visible_ && !bind_watch_audio_ && now > info_deadline_) {
-      bind_info_visible_ = false;
-      model_.DirtyVariable("info_visible");
-    }
+    if (bind_info_visible_ && !bind_watch_audio_ && now > info_deadline_)
+      Set("info_visible", bind_info_visible_, false);
   }
 
-  if (!bind_toast_.empty() && now > toast_deadline_) {
-    bind_toast_.clear();
-    model_.DirtyVariable("toast");
-  }
+  if (!bind_toast_.empty() && now > toast_deadline_)
+    Set("toast", bind_toast_, Rml::String());
 
   // Deferred scrolling: the rows generated by data bindings exist only
   // after the context update that follows the change, so scroll one frame
@@ -407,9 +336,8 @@ void App::EnsureRowVisible(const char* list_id, int index, float row_pitch) {
 }
 
 void App::ShowToast(const std::string& text) {
-  bind_toast_ = text;
   toast_deadline_ = Now() + kToastSec;
-  model_.DirtyVariable("toast");
+  Set("toast", bind_toast_, text);
 }
 
 // ---------------------------------------------------------------------------
@@ -466,8 +394,10 @@ std::string App::ImagePathFor(const std::string& uri) {
 
   PostTask([this, uri] {
     artcache::Fetch(uri); // the cache holds the result; we only signal
-    std::lock_guard<std::mutex> lock(pending_.mutex);
-    pending_.images.push_back(uri);
+    Reply([this, uri] {
+      image_inflight_.erase(uri);
+      image_refresh_pending_ = true; // coalesced: one refresh per frame
+    });
   });
 
   return {};
@@ -480,17 +410,11 @@ void App::RefreshImageBindings() {
     if (const browse::Entry* entry = SelectedEntry())
       detail = ImagePathFor(entry->image);
   }
-  if (bind_detail_image_ != detail) {
-    bind_detail_image_ = detail;
-    model_.DirtyVariable("detail_image");
-  }
+  Set("detail_image", bind_detail_image_, detail);
 
   // Now-playing card / transport bar follows the playing item.
   Rml::String watch;
   if (bind_watching_)
     watch = ImagePathFor(playing_.image);
-  if (bind_watch_image_ != watch) {
-    bind_watch_image_ = watch;
-    model_.DirtyVariable("watch_image");
-  }
+  Set("watch_image", bind_watch_image_, watch);
 }

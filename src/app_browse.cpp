@@ -31,8 +31,7 @@ Rml::String IconFor(const browse::Entry& e) {
 // ---------------------------------------------------------------------------
 
 void App::StartDiscovery() {
-  bind_status_ = "Searching for media sources...";
-  model_.DirtyVariable("status");
+  Set("status", bind_status_, Rml::String("Searching for media sources..."));
 
   busy_ops_++;
   PostTask([this] {
@@ -47,12 +46,20 @@ void App::StartDiscovery() {
       }
     }
 
-    {
-      std::lock_guard<std::mutex> lock(pending_.mutex);
-      pending_.sources_ready = true;
-      pending_.sources = std::move(sources);
-      pending_.discover_error = errors;
-    }
+    Reply([this, sources = std::move(sources), errors]() mutable {
+      sources_ = std::move(sources);
+      RebuildSourceRows();
+      Rml::String status;
+      if (sources_.empty()) {
+        status = errors.empty() ? "No media sources found." : errors;
+      } else {
+        status = std::to_string(sources_.size()) +
+          (sources_.size() == 1 ? " source found" : " sources found");
+        if (!errors.empty())
+          status += "  -  " + errors;
+      }
+      Set("status", bind_status_, status);
+    });
     busy_ops_--;
   });
 }
@@ -125,12 +132,9 @@ void App::OpenSource(int index) {
   path_.clear();
   sel_entry_ = 0;
 
-  bind_source_name_ = current_source_->Name();
-  model_.DirtyVariable("source_name");
-
+  Set("source_name", bind_source_name_, current_source_->Name());
   view_ = View::Browse;
-  bind_view_ = "browse";
-  model_.DirtyVariable("view");
+  Set("view", bind_view_, Rml::String("browse"));
 
   RebuildEntryRows();
   RebuildCrumb();
@@ -150,15 +154,30 @@ void App::RequestBrowse(const std::string& id, const std::string& name) {
     browse::Listing result;
     std::string error;
     source->Browse(id, result, error);
-    {
-      std::lock_guard<std::mutex> lock(pending_.mutex);
-      pending_.browse_ready = true;
-      pending_.browse_request = request;
-      pending_.browse_id = id;
-      pending_.browse_name = name;
-      pending_.browse = std::move(result);
-      pending_.browse_error = error;
-    }
+
+    Reply([this, request, id, name, result = std::move(result), error]() mutable {
+      if (request != browse_request_)
+        return; // superseded while it was in flight
+      if (!error.empty()) {
+        ShowToast(error);
+        // A failed root browse drops back to the source list.
+        if (path_.empty()) {
+          view_ = View::Sources;
+          Set("view", bind_view_, Rml::String("sources"));
+        }
+        return;
+      }
+      BrowseLevel level;
+      level.id = id;
+      level.name = name;
+      level.entries = std::move(result);
+      path_.push_back(std::move(level));
+      sel_entry_ = 0;
+      RebuildEntryRows();
+      RebuildCrumb();
+      RebuildDetail();
+      scroll_entries_pending_ = true;
+    });
     busy_ops_--;
   });
 }
@@ -178,8 +197,7 @@ void App::LeaveContainer() {
     path_.clear();
     current_source_.reset();
     view_ = View::Sources;
-    bind_view_ = "sources";
-    model_.DirtyVariable("view");
+    Set("view", bind_view_, Rml::String("sources"));
     scroll_sources_pending_ = true;
     return;
   }
@@ -217,21 +235,14 @@ void App::RebuildCrumb() {
       crumb += "  ›  ";
     crumb += level.name;
   }
-  bind_crumb_ = crumb;
-  model_.DirtyVariable("crumb");
+  Set("crumb", bind_crumb_, crumb);
 }
 
 void App::RebuildDetail() {
   const browse::Entry* e = SelectedEntry();
-  if (!e) {
-    bind_detail_name_.clear();
-    bind_detail_description_.clear();
-  } else {
-    bind_detail_name_ = e->name;
-    bind_detail_description_ = e->description;
-  }
-  model_.DirtyVariable("detail_name");
-  model_.DirtyVariable("detail_description");
+  Set("detail_name", bind_detail_name_, e ? e->name : std::string());
+  Set("detail_description", bind_detail_description_,
+      e ? e->description : std::string());
   RefreshImageBindings();
 }
 

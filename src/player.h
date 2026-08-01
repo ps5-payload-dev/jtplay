@@ -103,7 +103,6 @@ public:
   void Stop();
 
   bool IsPlaying() const { return active_; }
-  bool HasVideo() const { return video_stream_ >= 0; }
 
   // True once the file has been read to the end AND everything decoded has
   // been presented/played. The app uses it to leave the player or advance
@@ -161,31 +160,32 @@ public:
   bool SelectAudioTrack(int stream_index);
 
 private:
-  // A demuxed packet on its way to a decoder; timestamps in microseconds.
-  struct DemuxPacket {
-    uint32_t stream = 0;
-    int64_t pts = INT64_MIN;
-    int64_t dts = INT64_MIN;
-    char frametype = 0; // 'I' for keyframes
-    std::vector<uint8_t> payload;
-  };
-
+  // Demuxed packets waiting for a decoder. These are the demuxer's own
+  // reference-counted buffers, so nothing is copied on the way in or out;
+  // timestamps are rewritten to file-relative microseconds on ingest.
   struct PacketQueue {
-    std::mutex mutex;
+    static constexpr size_t kMaxPackets = 256;
+
+    mutable std::mutex mutex;
     std::condition_variable cv;
-    std::deque<DemuxPacket> q;
-    size_t max_packets = 256;
+    std::deque<AVPacket*> q; // owned
     // Bumped on flush; the decode thread resets its codec state when it sees
     // the counter change, so a seek doesn't smear old frames into new ones.
     uint32_t flush_epoch = 0;
 
-    void Push(DemuxPacket&& pkt);
-    bool Pop(DemuxPacket& out, std::atomic<bool>& running, uint32_t* epoch);
+    ~PacketQueue() { Clear(); }
+
+    // Takes ownership of 'pkt'. Drops it when the queue is full; the demux
+    // thread checks Full() before reading.
+    void Push(AVPacket* pkt);
+    // Moves the next packet into 'out'. False once the pipeline stops.
+    bool Pop(AVPacket* out, std::atomic<bool>& running, uint32_t* epoch);
     // Current flush counter, for a decode thread to notice that a seek
     // flushed the queue while it was blocked mid-frame.
-    uint32_t Epoch();
+    uint32_t Epoch() const;
     void Clear();
-    bool Full();
+    bool Full() const;
+    bool Empty() const;
   };
 
   struct TimedFrame {
@@ -233,7 +233,7 @@ private:
   // SelectVideoTrack(), consumed by the demux thread.
   std::atomic<int> video_switch_target_{-1};
 
-  std::mutex frames_mutex_;
+  mutable std::mutex frames_mutex_;
   std::condition_variable frames_cv_;
   std::deque<TimedFrame> frames_; // decoded, in presentation order
   static constexpr size_t kMaxFrames = 4;

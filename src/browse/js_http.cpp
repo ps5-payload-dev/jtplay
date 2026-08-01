@@ -60,7 +60,11 @@ namespace browse {
 	if (name)
 	  JS_FreeCString(ctx, name);
       }
-      //      JS_FreePropertyEnum(ctx, props, count);
+      // JS_FreePropertyEnum() only exists in newer QuickJS forks; freeing
+      // the atoms and the array by hand works on all of them.
+      for (uint32_t i = 0; i < count; i++)
+	JS_FreeAtom(ctx, props[i].atom);
+      js_free(ctx, props);
       return ok;
     }
 

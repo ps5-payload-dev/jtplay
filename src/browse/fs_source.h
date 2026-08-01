@@ -22,8 +22,6 @@ namespace browse {
 
   class FsProvider : public Provider {
   public:
-    explicit FsProvider() {}
-
     const char* Name() const override { return "fs"; }
 
     bool Discover(std::vector<SourcePtr>& out, std::string& error) override {

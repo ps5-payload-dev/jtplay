@@ -118,14 +118,6 @@ void PickResource(const XMLElement* obj, DidlObject& out)
 		return;
 
 	out.res_url = chosen->GetText();
-	if (const char* pi = chosen->Attribute("protocolInfo"))
-		out.protocol_info = pi;
-	if (const char* dur = chosen->Attribute("duration"))
-		out.duration_us = ParseDidlDuration(dur);
-	if (const char* size = chosen->Attribute("size"))
-		out.size_bytes = std::strtoll(size, nullptr, 10);
-	if (const char* r = chosen->Attribute("resolution"))
-		out.resolution = r;
 }
 
 DidlObject ParseObject(const XMLElement* e, bool container, const std::string& base_url)
@@ -134,10 +126,6 @@ DidlObject ParseObject(const XMLElement* e, bool container, const std::string& b
 	o.container = container;
 	if (const char* id = e->Attribute("id"))
 		o.id = id;
-	if (const char* pid = e->Attribute("parentID"))
-		o.parent_id = pid;
-	if (container)
-		o.child_count = e->IntAttribute("childCount", -1);
 
 	o.title = ChildText(e, "title");        // dc:title
 	o.upnp_class = ChildText(e, "class");   // upnp:class
@@ -184,9 +172,11 @@ bool BrowsePage(const MediaServer& server, const std::string& object_id,
 		"</s:Body>"
 		"</s:Envelope>";
 
-	const std::string headers =
-		"Content-Type: text/xml; charset=\"utf-8\"\r\n"
-		"SOAPACTION: \"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\"\r\n";
+	const Headers headers = {
+		{"Content-Type", "text/xml; charset=\"utf-8\""},
+		{"SOAPACTION",
+		 "\"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\""},
+	};
 
 	HttpResponse resp;
 	if (!HttpRequest("POST", server.control_url, headers, body, resp, error))
@@ -247,18 +237,6 @@ bool BrowsePage(const MediaServer& server, const std::string& object_id,
 }
 
 } // namespace
-
-int64_t ParseDidlDuration(const std::string& s)
-{
-	// H+:MM:SS[.F+] per the ContentDirectory spec; hours may exceed one digit.
-	int h = 0, m = 0;
-	double sec = 0.0;
-	if (std::sscanf(s.c_str(), "%d:%d:%lf", &h, &m, &sec) != 3)
-		return -1;
-	if (h < 0 || m < 0 || sec < 0)
-		return -1;
-	return (int64_t)(((int64_t)h * 3600 + (int64_t)m * 60) * 1000000 + sec * 1000000.0);
-}
 
 bool DescribeServer(const std::string& location, MediaServer& out, std::string& error)
 {

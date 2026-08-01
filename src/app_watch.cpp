@@ -46,13 +46,23 @@ void App::PlayEntry(const browse::Entry& entry) {
     } else if (error.empty()) {
       error = "this item has nothing to play";
     }
-    {
-      std::lock_guard<std::mutex> lock(pending_.mutex);
-      pending_.play_ready = true;
-      pending_.play_request = request;
-      pending_.play_ok = ok;
-      pending_.play_error = error;
-    }
+
+    Reply([this, request, ok, error] {
+      if (!launch_request_ || request != launch_request_) {
+        // Abandoned while it was opening (circle, or another item started).
+        // If it did open, take it down again rather than showing it.
+        if (ok)
+          PostTask([this] { player_->Stop(); });
+      } else if (!ok) {
+        ShowToast(error.empty() ? "Playback failed" : error);
+        CancelLaunch();
+      } else {
+        // The player is running: only now is there anything to look at.
+        playing_ = launch_entry_;
+        CancelLaunch();
+        EnterWatch(playing_);
+      }
+    });
     busy_ops_--;
   });
 }
@@ -65,45 +75,29 @@ void App::CancelLaunch() {
     return;
   launch_request_ = 0;
   launch_phase_ = kLaunchIdle;
-  if (!bind_launch_status_.empty()) {
-    bind_launch_status_.clear();
-    model_.DirtyVariable("launch_status");
-  }
+  Set("launch_status", bind_launch_status_, Rml::String());
 }
 
 void App::EnterWatch(const browse::Entry& entry) {
-  bind_watching_ = true;
-  bind_watch_audio_ = entry.IsAudio();
-  bind_watch_name_ = entry.name.empty() ? "(untitled)" : entry.name;
-  bind_watch_description_ = entry.description;
-
-  bind_watch_paused_ = false;
-  bind_watch_time_ = "";
-  bind_watch_progress_ = "0%";
-  bind_watch_vtrack_ = "";
-  bind_watch_atrack_ = "";
-  bind_watch_multi_video_ = false;
-  bind_watch_multi_audio_ = false;
-  model_.DirtyVariable("watching");
-  model_.DirtyVariable("watch_audio");
-  model_.DirtyVariable("watch_name");
-  model_.DirtyVariable("watch_description");
-  model_.DirtyVariable("watch_paused");
-  model_.DirtyVariable("watch_time");
-  model_.DirtyVariable("watch_progress");
-  model_.DirtyVariable("watch_vtrack");
-  model_.DirtyVariable("watch_atrack");
-  model_.DirtyVariable("watch_multi_video");
-  model_.DirtyVariable("watch_multi_audio");
+  Set("watching", bind_watching_, true);
+  Set("watch_audio", bind_watch_audio_, entry.IsAudio());
+  Set("watch_name", bind_watch_name_,
+      entry.name.empty() ? std::string("(untitled)") : entry.name);
+  Set("watch_description", bind_watch_description_, entry.description);
+  Set("watch_paused", bind_watch_paused_, false);
+  Set("watch_time", bind_watch_time_, Rml::String());
+  Set("watch_progress", bind_watch_progress_, Rml::String("0%"));
+  Set("watch_vtrack", bind_watch_vtrack_, Rml::String());
+  Set("watch_atrack", bind_watch_atrack_, Rml::String());
+  Set("watch_multi_video", bind_watch_multi_video_, false);
+  Set("watch_multi_audio", bind_watch_multi_audio_, false);
   RefreshImageBindings();
   ShowWatchInfo(kWatchInfoSec);
 }
 
 void App::ExitWatch() {
-  bind_watching_ = false;
-  bind_info_visible_ = false;
-  model_.DirtyVariable("watching");
-  model_.DirtyVariable("info_visible");
+  Set("watching", bind_watching_, false);
+  Set("info_visible", bind_info_visible_, false);
   RefreshImageBindings();
 }
 
@@ -114,9 +108,8 @@ void App::StopPlayback() {
 }
 
 void App::ShowWatchInfo(double seconds) {
-  bind_info_visible_ = true;
   info_deadline_ = Now() + seconds;
-  model_.DirtyVariable("info_visible");
+  Set("info_visible", bind_info_visible_, true);
 }
 
 void App::UpdateWatchOverlay() {
@@ -130,56 +123,22 @@ void App::UpdateWatchOverlay() {
     if (dur > 0) {
       time += " / " + FormatTime(dur);
       const int pct = std::clamp((int)(pos * 100 / dur), 0, 100);
-      progress = Rml::String(std::to_string(pct) + "%");
+      progress = std::to_string(pct) + "%";
     }
   }
-  if (bind_watch_time_ != time) {
-    bind_watch_time_ = time;
-    model_.DirtyVariable("watch_time");
-  }
-  if (bind_watch_progress_ != progress) {
-    bind_watch_progress_ = progress;
-    model_.DirtyVariable("watch_progress");
-  }
+  Set("watch_time", bind_watch_time_, time);
+  Set("watch_progress", bind_watch_progress_, progress);
+  Set("watch_paused", bind_watch_paused_, player_->IsPaused());
+  Set("watch_seekable", bind_watch_seekable_, player_->CanSeek());
 
-  const bool paused = player_->IsPaused();
-  if (bind_watch_paused_ != paused) {
-    bind_watch_paused_ = paused;
-    model_.DirtyVariable("watch_paused");
-  }
-
-  const bool seekable = player_->CanSeek();
-  if (bind_watch_seekable_ != seekable) {
-    bind_watch_seekable_ = seekable;
-    model_.DirtyVariable("watch_seekable");
-  }
-
-  // Codec lines for the info bar. These are the labels of the streams
-  // actually being decoded, so they follow a track switch; the counts only
-  // decide whether the switch hints are worth showing.
-  const Rml::String vtrack = player_->CurrentVideoLabel();
-  if (bind_watch_vtrack_ != vtrack) {
-    bind_watch_vtrack_ = vtrack;
-    model_.DirtyVariable("watch_vtrack");
-  }
-
-  const Rml::String atrack = player_->CurrentAudioLabel();
-  if (bind_watch_atrack_ != atrack) {
-    bind_watch_atrack_ = atrack;
-    model_.DirtyVariable("watch_atrack");
-  }
-
-  const bool multi_video = player_->VideoTrackCount() > 1;
-  if (bind_watch_multi_video_ != multi_video) {
-    bind_watch_multi_video_ = multi_video;
-    model_.DirtyVariable("watch_multi_video");
-  }
-
-  const bool multi_audio = player_->AudioTrackCount() > 1;
-  if (bind_watch_multi_audio_ != multi_audio) {
-    bind_watch_multi_audio_ = multi_audio;
-    model_.DirtyVariable("watch_multi_audio");
-  }
+  // The labels of the streams actually being decoded, so they follow a
+  // track switch; the counts only decide whether the switch hints show.
+  Set("watch_vtrack", bind_watch_vtrack_, player_->CurrentVideoLabel());
+  Set("watch_atrack", bind_watch_atrack_, player_->CurrentAudioLabel());
+  Set("watch_multi_video", bind_watch_multi_video_,
+      player_->VideoTrackCount() > 1);
+  Set("watch_multi_audio", bind_watch_multi_audio_,
+      player_->AudioTrackCount() > 1);
 }
 
 // Triangle / T: switches to the next audio track (wrapping around) and

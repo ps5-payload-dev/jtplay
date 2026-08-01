@@ -53,9 +53,6 @@ public:
   HttpClient(const HttpClient&) = delete;
   HttpClient& operator=(const HttpClient&) = delete;
 
-  // True if libcurl handed us a usable handle.
-  bool Valid() const { return curl_ != nullptr; }
-
   // Returns false only on transport errors (DNS, TLS, timeout, ...);
   // HTTP error statuses are a successful request with res.status set.
   bool Perform(const Request& req, Response& res, std::string& error);

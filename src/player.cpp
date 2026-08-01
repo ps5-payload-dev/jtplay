@@ -23,8 +23,12 @@ static_assert(kVizChannels == kPlayerAudioChannels, "visualizer channel count mi
 
 namespace {
 
-// Packets buffered ahead of each decoder.
-constexpr size_t kPacketQueueDepth = 256;
+// Unrefs a packet however the decode loop leaves the iteration.
+struct PacketUnref
+{
+	AVPacket* pkt;
+	~PacketUnref() { av_packet_unref(pkt); }
+};
 
 } // namespace
 
@@ -32,16 +36,19 @@ constexpr size_t kPacketQueueDepth = 256;
 // Packet queues
 // ---------------------------------------------------------------------------
 
-void Player::PacketQueue::Push(DemuxPacket&& pkt)
+void Player::PacketQueue::Push(AVPacket* pkt)
 {
 	std::lock_guard<std::mutex> lock(mutex);
-	if (q.size() >= max_packets)
-		return; // caller (the demux thread) retries after checking Full()
-	q.push_back(std::move(pkt));
+	if (q.size() >= kMaxPackets)
+	{
+		av_packet_free(&pkt); // caller retries after checking Full()
+		return;
+	}
+	q.push_back(pkt);
 	cv.notify_one();
 }
 
-bool Player::PacketQueue::Pop(DemuxPacket& out, std::atomic<bool>& running, uint32_t* epoch)
+bool Player::PacketQueue::Pop(AVPacket* out, std::atomic<bool>& running, uint32_t* epoch)
 {
 	std::unique_lock<std::mutex> lock(mutex);
 	cv.wait(lock, [&] { return !q.empty() || !running; });
@@ -49,12 +56,14 @@ bool Player::PacketQueue::Pop(DemuxPacket& out, std::atomic<bool>& running, uint
 		return false;
 	if (epoch)
 		*epoch = flush_epoch;
-	out = std::move(q.front());
+	AVPacket* front = q.front();
 	q.pop_front();
+	av_packet_move_ref(out, front);
+	av_packet_free(&front);
 	return true;
 }
 
-uint32_t Player::PacketQueue::Epoch()
+uint32_t Player::PacketQueue::Epoch() const
 {
 	std::lock_guard<std::mutex> lock(mutex);
 	return flush_epoch;
@@ -63,15 +72,23 @@ uint32_t Player::PacketQueue::Epoch()
 void Player::PacketQueue::Clear()
 {
 	std::lock_guard<std::mutex> lock(mutex);
+	for (AVPacket* pkt : q)
+		av_packet_free(&pkt);
 	q.clear();
 	flush_epoch++;
 	cv.notify_all();
 }
 
-bool Player::PacketQueue::Full()
+bool Player::PacketQueue::Full() const
 {
 	std::lock_guard<std::mutex> lock(mutex);
-	return q.size() >= max_packets;
+	return q.size() >= kMaxPackets;
+}
+
+bool Player::PacketQueue::Empty() const
+{
+	std::lock_guard<std::mutex> lock(mutex);
+	return q.empty();
 }
 
 // ---------------------------------------------------------------------------
@@ -426,8 +443,6 @@ bool Player::Open(const std::string& url, std::string& error)
 		return false;
 	}
 
-	vqueue_.max_packets = aqueue_.max_packets = kPacketQueueDepth;
-
 	if (!StartPipeline())
 	{
 		CloseInput();
@@ -541,21 +556,21 @@ void Player::DemuxThread()
 			continue;
 		}
 
-		if (pkt->stream_index == video_stream_ || pkt->stream_index == audio_stream_)
+		const bool is_video = pkt->stream_index == video_stream_;
+		if (is_video || pkt->stream_index == audio_stream_)
 		{
+			// Everything downstream works in file-relative microseconds.
 			const AVRational tb = fmt_->streams[pkt->stream_index]->time_base;
-			DemuxPacket out;
-			out.stream = (uint32_t)pkt->stream_index;
-			out.pts = (pkt->pts != AV_NOPTS_VALUE)
-				? av_rescale_q(pkt->pts, tb, AVRational{1, 1000000}) - file_start_us_ : INT64_MIN;
-			out.dts = (pkt->dts != AV_NOPTS_VALUE)
-				? av_rescale_q(pkt->dts, tb, AVRational{1, 1000000}) - file_start_us_ : INT64_MIN;
-			out.frametype = (pkt->flags & AV_PKT_FLAG_KEY) ? 'I' : 0;
-			out.payload.assign(pkt->data, pkt->data + pkt->size);
-			if (pkt->stream_index == video_stream_)
-				vqueue_.Push(std::move(out));
-			else
-				aqueue_.Push(std::move(out));
+			constexpr AVRational us = {1, 1000000};
+			if (pkt->pts != AV_NOPTS_VALUE)
+				pkt->pts = av_rescale_q(pkt->pts, tb, us) - file_start_us_;
+			if (pkt->dts != AV_NOPTS_VALUE)
+				pkt->dts = av_rescale_q(pkt->dts, tb, us) - file_start_us_;
+			if (AVPacket* queued = av_packet_alloc())
+			{
+				av_packet_move_ref(queued, pkt);
+				(is_video ? vqueue_ : aqueue_).Push(queued);
+			}
 		}
 		av_packet_unref(pkt);
 	}
@@ -702,22 +717,12 @@ bool Player::AtEnd() const
 	if (!active_ || !eof_)
 		return false;
 	{
-		std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(frames_mutex_));
+		std::lock_guard<std::mutex> lock(frames_mutex_);
 		if (!frames_.empty())
 			return false;
 	}
-	auto& vq = const_cast<PacketQueue&>(vqueue_);
-	auto& aq = const_cast<PacketQueue&>(aqueue_);
-	{
-		std::lock_guard<std::mutex> lock(vq.mutex);
-		if (!vq.q.empty())
-			return false;
-	}
-	{
-		std::lock_guard<std::mutex> lock(aq.mutex);
-		if (!aq.q.empty())
-			return false;
-	}
+	if (!vqueue_.Empty() || !aqueue_.Empty())
+		return false;
 	if (audio_dev_ && SDL_GetQueuedAudioSize(audio_dev_) > 0)
 		return false;
 	return true;
@@ -895,10 +900,11 @@ void Player::VideoThread()
 	// them would otherwise stall the picture for good.
 	int skip_budget = 0;
 
-	DemuxPacket in;
 	uint32_t pkt_epoch = 0;
-	while (vqueue_.Pop(in, threads_running_, &pkt_epoch))
+	while (vqueue_.Pop(pkt, threads_running_, &pkt_epoch))
 	{
+		PacketUnref unref{pkt};
+
 		// A flush happened (seek): drop whatever the decoder is holding.
 		if (!have_epoch)
 		{
@@ -914,26 +920,19 @@ void Player::VideoThread()
 		// Track switch: the demuxer now queues a different stream, so the
 		// decoder has to be rebuilt for it. On failure the packet is
 		// dropped and the reopen retried on the next one.
-		if ((int)in.stream != ctx_stream)
+		if (pkt->stream_index != ctx_stream)
 		{
-			if (!ReopenVideoDecoder((int)in.stream))
+			if (!ReopenVideoDecoder(pkt->stream_index))
 				continue;
-			ctx_stream = (int)in.stream;
+			ctx_stream = pkt->stream_index;
 			skip_budget = 120;
 		}
 		if (skip_budget > 0)
 		{
-			if (in.frametype != 'I' && --skip_budget > 0)
+			if (!(pkt->flags & AV_PKT_FLAG_KEY) && --skip_budget > 0)
 				continue;
 			skip_budget = 0;
 		}
-
-		av_new_packet(pkt, (int)in.payload.size());
-		std::memcpy(pkt->data, in.payload.data(), in.payload.size());
-		pkt->pts = (in.pts != INT64_MIN) ? in.pts : AV_NOPTS_VALUE;
-		pkt->dts = (in.dts != INT64_MIN) ? in.dts : AV_NOPTS_VALUE;
-		if (in.frametype == 'I')
-			pkt->flags |= AV_PKT_FLAG_KEY;
 
 		if (avcodec_send_packet(vctx_, pkt) == 0)
 		{
@@ -950,7 +949,6 @@ void Player::VideoThread()
 				av_frame_unref(frame);
 			}
 		}
-		av_packet_unref(pkt);
 	}
 
 	av_frame_free(&frame);
@@ -1023,10 +1021,11 @@ void Player::AudioThread()
 	bool have_epoch = false;
 	int ctx_stream = audio_stream_.load(); // stream actx_ was opened for
 
-	DemuxPacket in;
 	uint32_t pkt_epoch = 0;
-	while (aqueue_.Pop(in, threads_running_, &pkt_epoch))
+	while (aqueue_.Pop(pkt, threads_running_, &pkt_epoch))
 	{
+		PacketUnref unref{pkt};
+
 		if (!have_epoch)
 		{
 			epoch = pkt_epoch;
@@ -1046,20 +1045,15 @@ void Player::AudioThread()
 		// Track switch: the demuxer now queues a different stream, so the
 		// decoder has to be rebuilt for it. On failure the packet is
 		// dropped and the reopen retried on the next one.
-		if ((int)in.stream != ctx_stream)
+		if (pkt->stream_index != ctx_stream)
 		{
-			if (!ReopenAudioDecoder((int)in.stream))
+			if (!ReopenAudioDecoder(pkt->stream_index))
 				continue;
-			ctx_stream = (int)in.stream;
+			ctx_stream = pkt->stream_index;
 			pts_accum = INT64_MIN;
 			resampler_.Reset();
 			visualizer_.Reset();
 		}
-
-		av_new_packet(pkt, (int)in.payload.size());
-		std::memcpy(pkt->data, in.payload.data(), in.payload.size());
-		pkt->pts = (in.pts != INT64_MIN) ? in.pts : AV_NOPTS_VALUE;
-		pkt->dts = (in.dts != INT64_MIN) ? in.dts : AV_NOPTS_VALUE;
 
 		if (avcodec_send_packet(actx_, pkt) == 0)
 		{
@@ -1122,7 +1116,6 @@ void Player::AudioThread()
 				av_frame_unref(frame);
 			}
 		}
-		av_packet_unref(pkt);
 	}
 
 	av_frame_free(&frame);

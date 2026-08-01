@@ -25,14 +25,13 @@ struct MediaServer {
 };
 
 // One entry of a DIDL-Lite listing: either a container ("folder") or an
-// item with at least one <res> to play.
+// item with at least one <res> to play. Only what browse::Entry can carry
+// is kept; DIDL's remaining metadata is dropped while parsing.
 struct DidlObject {
   std::string id;
-  std::string parent_id;
   std::string title;
   std::string upnp_class;   // object.container..., object.item.videoItem...
   bool container = false;
-  int child_count = -1;     // containers only; -1 = not reported
 
   // Metadata, all optional.
   std::string artist;       // dc:creator or upnp:artist
@@ -42,12 +41,7 @@ struct DidlObject {
   std::string album_art;    // upnp:albumArtURI, absolute
   std::string thumb;        // image <res> on a non-image item (JPEG_TN etc)
 
-  // Best playable resource (http-get preferred).
-  std::string res_url;
-  std::string protocol_info;
-  int64_t duration_us = -1; // parsed from res@duration, -1 = unknown
-  int64_t size_bytes = -1;
-  std::string resolution;   // res@resolution, e.g. "1920x1080"
+  std::string res_url;      // best playable resource (http-get preferred)
 
   // Best artwork URL for this object: cover art if announced, otherwise a
   // server-generated thumbnail (videos), otherwise nothing.
@@ -73,9 +67,6 @@ bool DescribeServer(const std::string& location, MediaServer& out, std::string& 
 // complete listing (capped at 'max_objects' for pathological folders).
 bool Browse(const MediaServer& server, const std::string& object_id,
             BrowseResult& out, std::string& error, size_t max_objects = 5000);
-
-// "0:01:30.500" (DIDL res@duration) -> microseconds, or -1.
-int64_t ParseDidlDuration(const std::string& s);
 
 } // namespace upnp
 
