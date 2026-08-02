@@ -39,7 +39,8 @@ jobs:
 
       - name: Bundle
         run: |
-          zip -r JTPlay.zip assets jtplay fonts plugins homebrew.js
+          cp /opt/ps5-payload-sdk/target/user/homebrew/etc/ca-bundle.crt .
+          zip -r JTPlay.zip assets jtplay fonts plugins homebrew.js ca-bundle.crt
 
       - name: Upload
         uses: actions/upload-artifact@v4
