@@ -837,7 +837,7 @@ int64_t Player::MasterClock() const
 // Decode threads
 // ---------------------------------------------------------------------------
 
-void Player::PushVideoFrame(AVFrame* frame)
+void Player::PushVideoFrame(AVFrame* frame, uint32_t epoch)
 {
 	if (frame->width <= 0 || frame->height <= 0 || frame->format < 0)
 		return;
@@ -876,13 +876,28 @@ void Player::PushVideoFrame(AVFrame* frame)
 	av_frame_move_ref(tf.frame, frame);
 	tf.pts = (tf.frame->best_effort_timestamp != AV_NOPTS_VALUE) ? tf.frame->best_effort_timestamp : INT64_MIN;
 
+	// The queue is full for most of a normal playback, so this is where the
+	// video thread sits when a seek arrives. Waking on the flush as well as
+	// on free space is what keeps a pre-seek frame out of the queue: the
+	// demuxer bumps the epoch (vqueue_.Clear()) *before* it empties frames_
+	// (DropDecodedFrames()), so reading the epoch under frames_mutex_ is
+	// enough to order the two -- either the flush is already visible here,
+	// or it has not dropped the frames yet and will drop this one too.
+	//
+	// Letting a stale frame through wedges playback on a backwards seek: it
+	// sits at the head of the queue with a pts the new clock will never
+	// reach, RenderVideo() pops strictly in order and stops there, and
+	// everything behind it backs up until the demuxer stops reading.
 	std::unique_lock<std::mutex> lock(frames_mutex_);
-	frames_cv_.wait(lock, [&] { return frames_.size() < kMaxFrames || !threads_running_; });
-	if (!threads_running_)
+	frames_cv_.wait(lock, [&] {
+		return frames_.size() < kMaxFrames || !threads_running_ || vqueue_.Epoch() != epoch;
+	});
+	if (!threads_running_ || vqueue_.Epoch() != epoch)
 	{
 		av_frame_free(&tf.frame);
 		return;
 	}
+	tf.epoch = epoch;
 	frames_.push_back(tf);
 }
 
@@ -938,6 +953,19 @@ void Player::VideoThread()
 		{
 			while (avcodec_receive_frame(vctx_, frame) == 0)
 			{
+				// A seek flushed the queues while this packet was being
+				// decoded, so the frame is from before the jump. Drop it and
+				// the rest of this packet's output; the next Pop carries the
+				// new epoch and flushes the decoder. Anchoring the clock to
+				// such a frame is worse than presenting it: after a backwards
+				// seek the anchor lands ahead of everything the new position
+				// decodes, so nothing is ever due again.
+				if (vqueue_.Epoch() != epoch)
+				{
+					av_frame_unref(frame);
+					break;
+				}
+
 				// No audio stream: anchor the wall clock at the first frame.
 				if (audio_stream_ < 0 && wall_anchor_pts_ == INT64_MIN &&
 				    frame->best_effort_timestamp != AV_NOPTS_VALUE)
@@ -945,7 +973,7 @@ void Player::VideoThread()
 					wall_anchor_pts_ = frame->best_effort_timestamp;
 					wall_anchor_time_ = av_gettime_relative();
 				}
-				PushVideoFrame(frame);
+				PushVideoFrame(frame, epoch);
 				av_frame_unref(frame);
 			}
 		}
@@ -1105,7 +1133,13 @@ void Player::AudioThread()
 						pts_accum = frame->best_effort_timestamp + dur;
 					else if (pts_accum != INT64_MIN)
 						pts_accum += dur;
-					if (pts_accum != INT64_MIN)
+					// The demuxer resets audio_pts_end_ as part of the seek,
+					// so publishing a pts from before the jump here puts the
+					// master clock back where it was. Seeking forwards that
+					// only costs a moment of held frames, but seeking
+					// backwards it leaves the clock ahead of every frame the
+					// new position produces, and none of them come due.
+					if (pts_accum != INT64_MIN && aqueue_.Epoch() == epoch)
 						audio_pts_end_ = pts_accum;
 
 					// Same block, same timestamp the master clock counts
@@ -1161,7 +1195,12 @@ void Player::RenderVideo(int win_w, int win_h)
 		}
 	}
 
-	if (current_.pts != INT64_MIN)
+	// The frame on screen is left alone across a seek so the picture holds
+	// instead of blanking, but its pts is then from the old position. Writing
+	// it back would undo the seek target the demuxer stored, and since
+	// SeekRelative() builds on PositionUs(), a second press in the same
+	// direction would restart from where the first one began.
+	if (current_.pts != INT64_MIN && current_.epoch == vqueue_.Epoch())
 		last_position_us_ = current_.pts;
 
 	if (!current_.frame)

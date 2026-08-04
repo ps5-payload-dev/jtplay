@@ -191,6 +191,10 @@ private:
   struct TimedFrame {
     AVFrame* frame = nullptr;
     int64_t pts = INT64_MIN; // us
+    // vqueue_ flush counter this frame was decoded under. A frame whose
+    // epoch is stale comes from before a seek, so its pts belongs to a part
+    // of the file that is no longer being played.
+    uint32_t epoch = 0;
   };
 
   // Decode / present pipeline.
@@ -209,7 +213,10 @@ private:
   bool ReopenVideoDecoder(int stream_index);
   // Builds video_tracks_/audio_tracks_ from the open container.
   void CollectTracks();
-  void PushVideoFrame(AVFrame* frame);
+  // 'epoch' is the vqueue_ flush counter the packet this frame came from was
+  // popped under; the frame is dropped instead of queued if a seek has
+  // flushed the queues since.
+  void PushVideoFrame(AVFrame* frame, uint32_t epoch);
   void DropDecodedFrames();
   void SetStatus(const std::string& text);
 
