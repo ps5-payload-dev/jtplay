@@ -11,43 +11,39 @@ on:
       - '**/*.txt'
   workflow_dispatch:
 
-concurrency:
-  group: ${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
 
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install build-essential clang-18 lld-18
+    - name: Checkout SDK
+      uses: actions/checkout@v3
+      with:
+        repository: ps5-payload-dev/sdk
+        path: sdk
 
-      - name: Install toolchain
-        run: |
-          wget https://github.com/ps5-payload-dev/pacbrew-repo/releases/latest/download/ps5-payload-dev.tar.gz
-          sudo tar xf ps5-payload-dev.tar.gz -C /
+    - name: Setup SDK
+      working-directory: sdk
+      run: |
+        sudo apt update
+        sudo apt install clang-18 lld-18
+        make DESTDIR=${{ runner.tool_cache }}/ps5-payload-sdk clean install
+        echo PS5_PAYLOAD_SDK=${{ runner.tool_cache }}/ps5-payload-sdk >> $GITHUB_ENV
 
-      - name: Build
-        run: |
-          /opt/ps5-payload-sdk/bin/prospero-cmake -S . -B .
-          make
+    - name: Checkout Payload
+      uses: actions/checkout@v3
 
-      - name: Bundle
-        run: |
-          cp /opt/ps5-payload-sdk/target/user/homebrew/etc/ca-bundle.crt .
-          zip -r JTPlay.zip assets jtplay fonts plugins homebrew.js ca-bundle.crt
+    - name: Build Payload
+      run: |
+        make -f Makefile clean all
 
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: JTPlay
-          path: JTPlay.zip
-          if-no-files-found: error
+    - name: Upload Payload
+      uses: actions/upload-artifact@v4
+      with:
+        name: Payload
+        path: jtplay-install.elf
+        if-no-files-found: error
+
 
   release:
     needs: build
@@ -60,7 +56,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: JTPlay
+          name: Payload
           path: .
 
       - name: Create GitHub Release (pre-release)
@@ -68,4 +64,4 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           prerelease: true
-          files: JTPlay.zip
+          files: jtplay-install.elf

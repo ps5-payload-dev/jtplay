@@ -1,0 +1,457 @@
+/*
+ * Port of jtplay's rcss for the browser. Designed for a 1920x1080 context
+ * viewed from the couch: large type, high contrast, generous spacing, and
+ * an unmissable focus treatment. Palette is a deep blue-slate night
+ * background with a sea-glass teal accent used exclusively for
+ * focus/selection.
+ *
+ *   background   #0a0e18 / #101827
+ *   panel        #ffffff07 .. #ffffff14
+ *   text         #e8edf7    muted #8593ab    faint #5a6478
+ *   accent       #4dd6b8 (focus / selection only)
+ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-size: 26px;
+  color: #e8edf7;
+  background-color: #0d1322;
+  cursor: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Media layer beneath the UI. */
+#media {
+  position: absolute;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  background-color: #000;
+  display: none;
+}
+body.watching #media { display: block; }
+body.watching #shell { display: none; }
+
+#shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+/* ------------------------------------------------------------------ */
+/* Top bar                                                            */
+/* ------------------------------------------------------------------ */
+
+#topbar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 104px;
+  padding: 0 64px;
+  flex: none;
+}
+
+#topbar .brand-logo { width: 72px; height: 72px; }
+
+#topbar .crumb {
+  margin-left: 32px;
+  font-size: 24px;
+  color: #8593ab;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 1000px;
+}
+
+#topbar .spacer { flex: 1; }
+
+#topbar .busy { display: flex; gap: 6px; margin-left: 28px; }
+
+#topbar .clock {
+  font-size: 42px;
+  font-weight: bold;
+  color: #e8edf7;
+}
+
+/* Busy dots: one dim dot when idle, four pulsing when working. */
+.busy-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  background-color: #4dd6b8;
+  opacity: 0.25;
+}
+.busy-dot1, .busy-dot2, .busy-dot3 { display: none; }
+#busy.on .busy-dot1, #busy.on .busy-dot2, #busy.on .busy-dot3 { display: block; }
+#busy.on .busy-dot { animation: pulse 1s infinite; }
+#busy.on .busy-dot1 { animation-delay: 0.15s; }
+#busy.on .busy-dot2 { animation-delay: 0.30s; }
+#busy.on .busy-dot3 { animation-delay: 0.45s; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.25; }
+  50%      { opacity: 1.0; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Content + footer                                                   */
+/* ------------------------------------------------------------------ */
+
+.content {
+  display: none;
+  flex-direction: row;
+  flex: 1;
+  padding: 0 64px;
+  overflow: hidden;
+}
+.content.active { display: flex; }
+
+#footer {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 92px;
+  padding: 0 64px;
+  flex: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 15px;
+  margin-right: 20px;
+  font-size: 19px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: #8593ab;
+  background-color: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.key-icon { width: 26px; height: 26px; vertical-align: middle; }
+
+/* ------------------------------------------------------------------ */
+/* Panes and lists                                                    */
+/* ------------------------------------------------------------------ */
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pane-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 52px;
+  margin-bottom: 10px;
+  flex: none;
+}
+
+.eyebrow {
+  font-size: 20px;
+  font-weight: bold;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: #5a6478;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.pane.active .eyebrow { color: #4dd6b8; }
+
+.pane-head .count {
+  margin-left: 16px;
+  font-size: 20px;
+  color: #5a6478;
+}
+
+.list {
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.list::-webkit-scrollbar { width: 8px; }
+.list::-webkit-scrollbar-track { background-color: rgba(255,255,255,0.02); }
+.list::-webkit-scrollbar-thumb {
+  background-color: rgba(255,255,255,0.13);
+  border-radius: 4px;
+}
+
+.empty {
+  padding: 40px 0;
+  font-size: 24px;
+  color: #5a6478;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------ */
+/* Sources                                                            */
+/* ------------------------------------------------------------------ */
+
+#sources {
+  width: 1100px;
+  margin: 0 auto; /* centered inside the content strip */
+}
+
+.source-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 96px;
+  margin-bottom: 12px;
+  padding: 0 28px;
+  background-color: rgba(255,255,255,0.03);
+  border: 2px solid transparent;
+  border-radius: 14px;
+}
+.source-row.selected {
+  background-color: rgba(77,214,184,0.10);
+  border-color: #4dd6b8;
+}
+
+.srcicon {
+  width: 72px;
+  font-size: 44px;
+  text-align: center;
+  margin-right: 20px;
+  flex: none;
+}
+
+.srcinfo {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.srcname {
+  font-size: 32px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.srcdetail {
+  margin-top: 4px;
+  font-size: 22px;
+  color: #8593ab;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/* Entries                                                            */
+/* ------------------------------------------------------------------ */
+
+#entries { flex: 3; margin-right: 32px; }
+#details { flex: 2; }
+
+.entry-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 76px;
+  margin-bottom: 10px;
+  padding: 0 24px;
+  background-color: rgba(255,255,255,0.03);
+  border: 2px solid transparent;
+  border-radius: 12px;
+  flex: none;
+}
+.entry-row.selected {
+  background-color: rgba(77,214,184,0.10);
+  border-color: #4dd6b8;
+}
+
+.eicon {
+  width: 56px;
+  font-size: 34px;
+  text-align: center;
+  margin-right: 18px;
+  flex: none;
+}
+
+.etitle {
+  flex: 1;
+  font-size: 28px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entry-row.folder .etitle { font-weight: bold; }
+
+/* ------------------------------------------------------------------ */
+/* Details                                                            */
+/* ------------------------------------------------------------------ */
+
+.detail-body {
+  padding: 28px 32px;
+  background-color: rgba(255,255,255,0.03);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.detail-body.hidden { display: none; }
+
+.detail-art {
+  display: block;
+  max-width: 600px;
+  max-height: 600px;
+  margin-bottom: 24px;
+  border-radius: 12px;
+}
+.detail-art[src=""] { display: none; }
+
+.detail-desc {
+  font-size: 24px;
+  line-height: 1.55em;
+  color: #aab6cc;
+  white-space: pre-line;
+}
+
+/* ------------------------------------------------------------------ */
+/* Video transport bar                                                */
+/* ------------------------------------------------------------------ */
+
+#watch-bar {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: none;
+  flex-direction: row;
+  align-items: center;
+  padding: 36px 56px 44px 56px;
+  background-color: rgba(10,14,24,0.85);
+  border-top: 2px solid rgba(255,255,255,0.08);
+}
+body.watching.info #watch-bar { display: flex; }
+
+.watch-thumb {
+  height: 130px;
+  border-radius: 10px;
+  margin-right: 40px;
+}
+.watch-thumb[src=""] { display: none; }
+
+.watch-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  margin-right: 40px;
+  overflow: hidden;
+}
+
+.watch-name {
+  font-size: 40px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.watch-progress {
+  margin-top: 16px;
+  width: 100%;
+  max-width: 900px;
+  height: 8px;
+  border-radius: 4px;
+  background-color: rgba(255,255,255,0.10);
+}
+.watch-progress.hidden { display: none; }
+.watch-progress .bar {
+  width: 0;
+  height: 8px;
+  border-radius: 4px;
+  background-color: #4dd6b8;
+}
+
+.watch-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: none;
+}
+
+.watch-time { font-size: 30px; }
+
+.watch-hints { margin-top: 18px; white-space: nowrap; }
+.watch-hints .chip {
+  margin-right: 0;
+  margin-left: 14px;
+  color: #aab6cc;
+}
+.watch-hints .chip.hidden { display: none; }
+
+/* ------------------------------------------------------------------ */
+/* Audio now-playing card                                             */
+/* ------------------------------------------------------------------ */
+
+#audio-card {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: 900px;
+  padding: 56px 64px;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  background-color: rgba(16,24,39,0.95);
+  border: 2px solid rgba(255,255,255,0.08);
+  border-radius: 22px;
+}
+body.watching.audio #audio-card { display: flex; }
+
+.np-art {
+  width: 320px;
+  height: 320px;
+  object-fit: cover;
+  border-radius: 16px;
+  margin-bottom: 32px;
+}
+.np-art[src=""] { display: none; }
+
+.np-title {
+  font-size: 40px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.np-meta {
+  margin-top: 12px;
+  font-size: 24px;
+  color: #8593ab;
+  text-align: center;
+}
+
+.np-state {
+  display: none;
+  margin-top: 24px;
+  font-size: 22px;
+  font-weight: bold;
+  letter-spacing: 4px;
+  color: #4dd6b8;
+}
+body.paused .np-state { display: block; }
+
+/* ------------------------------------------------------------------ */
+/* Toast                                                              */
+/* ------------------------------------------------------------------ */
+
+#toast {
+  position: absolute;
+  left: 50%; bottom: 130px;
+  transform: translateX(-50%);
+  display: none;
+  padding: 16px 32px;
+  font-size: 24px;
+  background-color: rgba(16,24,39,0.95);
+  border: 2px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+}
+#toast.on { display: block; }

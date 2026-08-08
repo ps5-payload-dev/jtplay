@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>JTPlay</title>
+    <meta name="viewport" content="width=1920"/>
+    <link rel="stylesheet" href="css/style.css"/>
+  </head>
+  <body>
+
+    <!-- Video/audio element sits beneath the UI, like jtplay's frame layer. -->
+    <video id="media" playsinline></video>
+
+    <div id="shell">
+      <div id="topbar">
+	<img class="brand-logo" src="icons/logo.png"/>
+	<span class="crumb" id="crumb"></span>
+	<span class="busy" id="busy">
+          <span class="busy-dot busy-dot0"></span>
+          <span class="busy-dot busy-dot1"></span>
+          <span class="busy-dot busy-dot2"></span>
+          <span class="busy-dot busy-dot3"></span>
+	</span>
+	<span class="spacer"></span>
+	<span class="clock" id="clock"></span>
+      </div>
+
+      <!-- ====================== Sources ====================== -->
+      <div class="content" id="view-sources">
+	<div id="sources" class="pane active">
+          <div class="pane-head">
+            <span class="eyebrow">Media sources</span>
+            <span class="count" id="source-count"></span>
+          </div>
+          <div id="source-list" class="list"></div>
+	</div>
+      </div>
+
+      <!-- ====================== Browse ======================= -->
+      <div class="content" id="view-browse">
+	<div id="entries" class="pane active">
+          <div class="pane-head">
+            <span class="eyebrow" id="browse-title"></span>
+            <span class="count" id="entry-count"></span>
+          </div>
+          <div id="entry-list" class="list"></div>
+	</div>
+	<div id="details" class="pane">
+          <div class="pane-head">
+            <span class="eyebrow">Details</span>
+          </div>
+          <div class="detail-body" id="detail-body">
+            <img class="detail-art" id="detail-art"/>
+            <div class="detail-desc" id="detail-desc"></div>
+          </div>
+	</div>
+      </div>
+
+      <div id="footer">
+	<span class="chip"><img class="key-icon" src="icons/cross.png"/>&nbsp;Select</span>
+	<span class="chip"><img class="key-icon" src="icons/circle.png"/>&nbsp;Back</span>
+      </div>
+    </div>
+
+    <!-- ====================== Watching ===================== -->
+
+    <!-- Audio: persistent now-playing card in the middle of the screen. -->
+    <div id="audio-card">
+      <img class="np-art" id="np-art"/>
+      <div class="np-title" id="np-title"></div>
+      <div class="np-meta" id="np-meta"></div>
+      <div class="np-state" id="np-state">PAUSED</div>
+    </div>
+
+    <!-- Video: auto-hiding transport bar over the frames. -->
+    <div id="watch-bar">
+      <img class="watch-thumb" id="watch-thumb"/>
+      <div class="watch-main">
+	<div class="watch-name" id="watch-name"></div>
+	<div class="watch-progress" id="watch-progress">
+          <div class="bar" id="watch-progress-bar"></div>
+	</div>
+      </div>
+      <div class="watch-side">
+	<div class="watch-time" id="watch-time"></div>
+	<div class="watch-hints">
+          <span class="chip" id="hint-seek"><img class="key-icon" src="icons/dpad.png"/>&nbsp;Seek</span>
+          <span class="chip"><img class="key-icon" src="icons/cross.png"/>&nbsp;Play/Pause</span>
+          <span class="chip"><img class="key-icon" src="icons/circle.png"/>&nbsp;Stop</span>
+          <span class="chip"><img class="key-icon" src="icons/options.png"/>&nbsp;Info</span>
+	</div>
+      </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script>window.Providers = [];</script>
+    <script src="js/vendor/hls.min.js"></script>
+    <script src="js/providers/sr.js"></script>
+    <script src="js/providers/svtplay.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

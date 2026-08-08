@@ -1,0 +1,11 @@
+{
+    "applicationCategoryType": 66048,
+    "titleId": "BREW10003",
+    "localizedParameters": {
+	"defaultLanguage": "en-US",
+	"en-US": {
+	    "titleName": "JT Play"
+	}
+    },
+    "webAppUri": "https://ps5-payload-dev.github.io/jtplay"
+}
