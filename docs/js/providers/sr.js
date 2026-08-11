@@ -1,20 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 export default function init(ctx) {
-    const NAME = "Sveriges Radio";
-    const DETAILS = "Live radio from Swedish public service";
-    const URL = "https://api.sr.se/api/v2/channels?format=json&pagination=false&audioquality=hi";
-    const ICON = "📻";
+    const API_URL = "https://api.sr.se/api/v2/channels?format=json&pagination=false&audioquality=hi";
 
     return async function discover() {
 	return [{
-	    name: NAME,
-	    detail: DETAILS,
-	    icon: ICON,
+	    name: "Sveriges Radio",
+	    detail: "Live radio from Swedish public service",
+	    icon: "📻",
 	    browse: async function(id) {
-		const res = await fetch(URL);
+		const res = await fetch(API_URL);
 		if (!res.ok) {
-		    throw new Error(NAME + ": " + res.status);
+		    throw new Error(res.status);
 		}
 
 		const channels = (await res.json()).channels || [];
