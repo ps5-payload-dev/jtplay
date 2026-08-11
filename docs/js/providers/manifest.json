@@ -1,0 +1,17 @@
+{
+    "version": 1,
+    "plugins": [
+	{
+	    "id": "sr",
+	    "name": "Sveriges Radio",
+	    "src": "sr.js",
+	    "enabled": true
+	},
+	{
+	    "id": "svtplay",
+	    "name": "SVT Play",
+	    "src": "svtplay.js",
+	    "enabled": true
+	}
+    ]
+}

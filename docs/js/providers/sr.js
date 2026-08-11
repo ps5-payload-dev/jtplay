@@ -1,38 +1,32 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//
-// Sveriges Radio: live channels from the open SR API. Browser port of
-// jtplay's plugins/sr.js; http.get became fetch(), so browse() is async.
 
-(function() {
-  var API_URL = "https://api.sr.se/api/v2";
+export default function init(ctx) {
+    const NAME = "Sveriges Radio";
+    const DETAILS = "Live radio from Swedish public service";
+    const URL = "https://api.sr.se/api/v2/channels?format=json&pagination=false&audioquality=hi";
+    const ICON = "📻";
 
-  async function fetchChannels() {
-    var res = await fetch(API_URL +
-      "/channels?format=json&pagination=false&audioquality=hi");
-    if (!res.ok) {
-      throw new Error("SR API: HTTP " + res.status);
+    return async function discover() {
+	return [{
+	    name: NAME,
+	    detail: DETAILS,
+	    icon: ICON,
+	    browse: async function(id) {
+		const res = await fetch(URL);
+		if (!res.ok) {
+		    throw new Error(NAME + ": " + res.status);
+		}
+
+		const channels = (await res.json()).channels || [];
+		return channels.map((ch) => ({
+		    id: String(ch.id),
+		    type: "audio",
+		    name: ch.name,
+		    description: ch.tagline,
+		    image: ch.image,
+		    uri: ch.liveaudio.url
+		}));
+	    }
+	}];
     }
-    var channels = (await res.json()).channels || [];
-
-    return channels.map(function(ch) {
-      return {
-        id: String(ch.id),
-        type: "audio",
-        name: ch.name,
-        description: ch.tagline,
-        image: ch.image,
-        uri: ch.liveaudio.url
-      };
-    });
-  }
-
-  window.Providers.push({
-    name: "Sveriges Radio",
-    detail: "Live radio from Swedish public service",
-    icon: "\uD83D\uDCFB", // 📻
-
-    browse: function(id) {
-      return fetchChannels();
-    }
-  });
-})();
+}

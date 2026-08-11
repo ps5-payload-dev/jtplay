@@ -8,6 +8,7 @@
 //   X (Enter)      select / play-pause
 //   O (Escape)     back / stop
 //   d-pad          navigate / seek
+//   triangle (F1)  reload plugins and rediscover providers (sources view)
 //   options (F3)   toggle the info bar in watch mode
 
 (function() {
@@ -35,6 +36,8 @@
 
   var state = {
     view: "sources",     // 'sources' | 'browse' | 'watch'
+    providers: [],       // discovered by the plugins, see plugins.js
+    loading: false,      // a discovery pass is in flight
     selSource: 0,
     // Browse history: [{provider, id, crumb, entries, sel, scroll}].
     stack: [],
@@ -82,6 +85,8 @@
     state.view = name;
     $("view-sources").className = "content" + (name === "sources" ? " active" : "");
     $("view-browse").className = "content" + (name === "browse" ? " active" : "");
+    // Refreshing is only offered where the provider list is on screen.
+    $("hint-refresh").className = "chip" + (name === "sources" ? "" : " hidden");
   }
 
   function icon(entry) {
@@ -93,7 +98,17 @@
   function renderSources() {
     var list = $("source-list");
     list.innerHTML = "";
-    window.Providers.forEach(function(p, i) {
+
+    if (!state.providers.length) {
+      var empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = state.loading
+        ? "Looking for media providers\u2026"
+        : "No media providers. Press \u25B3 to try again.";
+      list.appendChild(empty);
+    }
+
+    state.providers.forEach(function(p, i) {
       var row = document.createElement("div");
       row.className = "source-row" + (i === state.selSource ? " selected" : "");
       row.innerHTML =
@@ -105,7 +120,7 @@
       row.children[1].children[1].textContent = p.detail;
       list.appendChild(row);
     });
-    $("source-count").textContent = window.Providers.length;
+    $("source-count").textContent = state.providers.length || "";
   }
 
   function renderEntries() {
@@ -174,12 +189,62 @@
   }
 
   // ------------------------------------------------------------------
+  // Plugins
+  // ------------------------------------------------------------------
+
+  // Reload every plugin from the manifest and re-run their discovery
+  // functions. The cursor stays on the same provider when it comes back.
+  function refreshProviders(initial) {
+    if (state.loading) {
+      return;
+    }
+
+    var prev = state.providers[state.selSource];
+    var prevKey = prev ? prev.key : null;
+
+    state.loading = true;
+    busy(true);
+    renderSources();
+
+    window.Plugins.reload().then(function(result) {
+      state.loading = false;
+      busy(false);
+
+      state.providers = result.providers;
+      state.selSource = 0;
+      for (var i = 0; i < state.providers.length; i++) {
+        if (state.providers[i].key === prevKey) {
+          state.selSource = i;
+          break;
+        }
+      }
+      renderSources();
+
+      if (result.errors.length) {
+        var first = result.errors[0];
+        toast(first.plugin + ": " + (first.error.message || first.error) +
+              (result.errors.length > 1
+               ? " (+" + (result.errors.length - 1) + " more)" : ""));
+      } else if (!initial) {
+        toast(result.providers.length + " providers from " +
+              result.plugins + " plugins");
+      }
+    });
+  }
+
+  // ------------------------------------------------------------------
   // Browsing
   // ------------------------------------------------------------------
 
+  // Plugin code is third-party, so a synchronous throw has to end up as a
+  // rejection rather than escaping into the key handler.
+  function call(fn, arg) {
+    return new Promise(function(resolve) { resolve(fn(arg)); });
+  }
+
   function openFolder(provider, id, crumb) {
     busy(true);
-    Promise.resolve(provider.browse(id))
+    call(provider.browse, id)
       .then(function(entries) {
         state.stack.push({provider: provider, id: id, crumb: crumb,
                           entries: entries || [], sel: 0});
@@ -271,7 +336,7 @@
 
     var provider = top().provider;
     busy(true);
-    Promise.resolve(provider.resolve(entry.id))
+    call(provider.resolve, entry.id)
       .then(play)
       .catch(function(err) {
         console.error(err);
@@ -380,7 +445,12 @@
   // ------------------------------------------------------------------
 
   function onKeySources(code) {
-    var n = window.Providers.length;
+    if (code === KEY.TRIANGLE) {
+      refreshProviders(false);
+      return;
+    }
+
+    var n = state.providers.length;
     if (!n) {
       return;
     }
@@ -394,7 +464,7 @@
       updateSourceSelection();
       break;
     case KEY.CROSS:
-      var p = window.Providers[state.selSource];
+      var p = state.providers[state.selSource];
       openFolder(p, "", p.name);
       break;
     }
@@ -472,6 +542,6 @@
   // Boot
   // ------------------------------------------------------------------
 
-  renderSources();
   showView("sources");
+  refreshProviders(true);
 })();

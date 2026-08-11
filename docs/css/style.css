@@ -136,6 +136,8 @@ body.watching #shell { display: none; }
   white-space: nowrap;
 }
 
+.chip.hidden { display: none; }
+
 .key-icon { width: 26px; height: 26px; vertical-align: middle; }
 
 /* ------------------------------------------------------------------ */

@@ -11,7 +11,7 @@
 // refreshed. Playback goes through the separate video API, which mints
 // short-lived manifest URLs, hence resolve() rather than a uri per entry.
 
-(function() {
+export default function init(ctx) {
     var VIDEO_API = "https://api.svt.se/video/";
     var QUERY_API = "https://api.svt.se/contento/graphql";
     var IMAGE_API = "https://www.svtstatic.se/image";
@@ -485,7 +485,7 @@
 	return url;
     }
 
-    window.Providers.push({
+    var provider = {
 	name: "SVT Play",
 	detail: "TV from Swedish public service",
 	icon: "\uD83D\uDCFA", // 📺
@@ -555,5 +555,9 @@
 	    }
 	    return resolveStream(id);
 	}
-    });
-})();
+    };
+
+    return async function discover() {
+	return [provider];
+    };
+}
