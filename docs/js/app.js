@@ -40,7 +40,7 @@
     stack: [],
     busy: 0,
     watch: null,         // {entry, audio, live}
-    hls: null,
+    playSeq: 0,          // bumped on every load, so stale errors are ignored
     infoTimer: 0,
     toastTimer: 0
   };
@@ -208,28 +208,41 @@
   // ------------------------------------------------------------------
 
   function playUrl(url) {
-    if (state.hls) {
-      state.hls.destroy();
-      state.hls = null;
-    }
+    var seq = ++state.playSeq;
 
-    var isHls = url.indexOf(".m3u8") > 0;
-    var native = media.canPlayType("application/vnd.apple.mpegurl");
+    media.pause();
+    media.src = url;
+    media.load();
 
-    if (isHls && !native && window.Hls && window.Hls.isSupported()) {
-      state.hls = new Hls();
-      state.hls.on(Hls.Events.ERROR, function(ev, data) {
-        if (data.fatal) {
-          toast("Playback error: " + data.details);
-          stopWatch();
+    var p = media.play();
+    if (p && p.catch) {
+      p.catch(function(err) {
+        // A load that got superseded rejects with AbortError; ignore those.
+        if (seq !== state.playSeq || !state.watch) {
+          return;
         }
+        if (err && err.name === "AbortError") {
+          return;
+        }
+        console.error(err);
+        toast("Could not start playback");
+        stopWatch();
       });
-      state.hls.loadSource(url);
-      state.hls.attachMedia(media);
-    } else {
-      media.src = url;
     }
-    media.play();
+  }
+
+  function mediaErrorText() {
+    var err = media.error;
+    if (!err) {
+      return "Playback error";
+    }
+    switch (err.code) {
+    case 1: return "Playback aborted";
+    case 2: return "Network error";
+    case 3: return "Cannot decode this stream";
+    case 4: return "Unsupported format or source";
+    }
+    return "Playback error";
   }
 
   function startWatch(entry) {
@@ -268,10 +281,7 @@
   }
 
   function stopWatch() {
-    if (state.hls) {
-      state.hls.destroy();
-      state.hls = null;
-    }
+    state.playSeq++;
     media.pause();
     media.removeAttribute("src");
     media.load();
@@ -349,8 +359,10 @@
     }
   });
   media.addEventListener("error", function() {
-    if (state.watch && media.error) {
-      toast("Playback error");
+    // Tearing the element down at stop time can fire one last error; only
+    // react while something is actually loaded.
+    if (state.watch && media.error && media.getAttribute("src")) {
+      toast(mediaErrorText());
       stopWatch();
     }
   });

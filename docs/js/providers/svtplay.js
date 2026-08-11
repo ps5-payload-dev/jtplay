@@ -51,12 +51,18 @@
     // Subheadings that only repeat what the row already says.
     var NOISE = /^(Idag|Ikv\u00e4ll|Ig\u00e5r|I morgon)\b|\b(sek|min|tim)$/i;
 
-    // Only HLS plays in the browser (natively or via hls.js); DASH would need
-    // a different player, so it is not on the list.
+    // Formats the <video> element can take directly, best first. WebKit plays
+    // HLS natively, and progressive mp4/webm are just files, so both are fine.
+    // DASH needs MediaSource plumbing we do not have, so it is not listed.
     var FORMATS = [
 	"hls", "hls-ts-avc", "hls-cmaf-full", "hls-cmaf-live", "hls-cmaf",
-	"hls-ts-avc-51", "hls-ts-full"
+	"hls-ts-avc-51", "hls-ts-full",
+	"mp4", "mp4-avc", "webm"
     ];
+
+    // Fallback when SVT renames a format: anything whose url looks like
+    // something the element can open on its own.
+    var PLAYABLE_URL = /\.(m3u8|mp4|webm)(\?|#|$)/i;
 
     // Listings are browsed back and forth, and A-O is one 1500 item response,
     // so keep answers around briefly.
@@ -459,9 +465,9 @@
 
 	if (!best) {
 	    // SVT renames formats now and then, so before giving up take anything
-	    // that looks like an HLS manifest.
+	    // whose url looks directly playable.
 	    best = refs.filter(function(ref) {
-		return String(ref.url || "").indexOf(".m3u8") > 0;
+		return PLAYABLE_URL.test(String(ref.url || ""));
 	    })[0];
 	}
 
