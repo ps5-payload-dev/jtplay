@@ -9,6 +9,7 @@
 //   O (Escape)     back / stop
 //   d-pad          navigate / seek
 //   triangle (F1)  reload plugins and rediscover providers (sources view)
+//   square (F2)    sign out of the selected source (sources view)
 //   options (F3)   toggle the info bar in watch mode
 
 (function() {
@@ -29,6 +30,7 @@
 
   var $ = function(id) { return document.getElementById(id); };
   var media = $("media");
+  var Auth = window.Auth;
 
   // ------------------------------------------------------------------
   // State
@@ -87,6 +89,7 @@
     $("view-browse").className = "content" + (name === "browse" ? " active" : "");
     // Refreshing is only offered where the provider list is on screen.
     $("hint-refresh").className = "chip" + (name === "sources" ? "" : " hidden");
+    updateSourceHints();
   }
 
   function icon(entry) {
@@ -114,13 +117,57 @@
       row.innerHTML =
         '<div class="srcicon"></div>' +
         '<div class="srcinfo"><div class="srcname"></div>' +
-        '<div class="srcdetail"></div></div>';
+        '<div class="srcdetail"></div></div>' +
+        '<div class="srclock"></div>';
       row.children[0].textContent = p.icon;
       row.children[1].children[0].textContent = p.name;
       row.children[1].children[1].textContent = p.detail;
+
+      // Which parts of a source need a login is the plugin's business and is
+      // only discovered by opening them, so there is nothing to say here
+      // until we are actually holding credentials for one.
+      var lock = row.children[2];
+      var accounts = Auth.accounts(p);
+      if (!accounts.length) {
+        lock.className = "srclock hidden";
+      } else {
+        lock.className = "srclock";
+        lock.textContent = "\uD83D\uDC64 " + (accounts.length === 1 // 👤
+          ? accounts[0].user
+          : accounts.length + " logins");
+      }
+
       list.appendChild(row);
     });
     $("source-count").textContent = state.providers.length || "";
+    updateSourceHints();
+  }
+
+  // Signing out is only offered on a source that actually has a login, so
+  // the hint comes and goes with the selection.
+  function updateSourceHints() {
+    var p = state.providers[state.selSource];
+    var signedIn = !!(p && Auth.accounts(p).length);
+    $("hint-signout").className = "chip" +
+      (state.view === "sources" && signedIn ? "" : " hidden");
+  }
+
+  // Drops every login the selected source holds, which is the only thing a
+  // single button can sensibly mean when one source can hold several.
+  function signOutSource() {
+    var p = state.providers[state.selSource];
+    if (!p) {
+      return;
+    }
+    var count = Auth.accounts(p).length;
+    if (!count) {
+      return;
+    }
+    Auth.signOut(p);
+    renderSources();
+    toast(count === 1
+      ? "Signed out of " + p.name
+      : "Signed out of " + count + " logins on " + p.name);
   }
 
   function renderEntries() {
@@ -186,6 +233,7 @@
         rows[i].scrollIntoView({block: "nearest"});
       }
     }
+    updateSourceHints();
   }
 
   // ------------------------------------------------------------------
@@ -236,16 +284,65 @@
   // Browsing
   // ------------------------------------------------------------------
 
+  // Returned in place of a result when the viewer backs out of the sign-in
+  // dialog, so the caller can go quiet instead of reporting an error.
+  var CANCELLED = {cancelled: true};
+
+  // Calls into a plugin, starting with no credentials at all.
+  //
   // Plugin code is third-party, so a synchronous throw has to end up as a
-  // rejection rather than escaping into the key handler.
-  function call(fn, arg) {
-    return new Promise(function(resolve) { resolve(fn(arg)); });
+  // rejection rather than escaping into the key handler. On top of that, a
+  // plugin decides for itself whether what is being opened needs a login and
+  // says so by throwing Auth.required({realm, ...}). We answer with
+  // credentials for exactly the realm named - the saved ones if there are
+  // any, otherwise whatever the dialog collects - and call again. Credentials
+  // that come back refused are dropped and asked for afresh.
+  //
+  // Nothing here knows how a plugin authenticates, so a query parameter, a
+  // header, a token endpoint and a library that never asks can all sit behind
+  // the same source.
+  function call(provider, fn, arg) {
+    function attempt(creds) {
+      return new Promise(function(resolve) { resolve(fn(arg, creds)); })
+        .catch(function(err) {
+          if (!Auth.isRequired(err)) {
+            throw err;
+          }
+
+          // Were we already carrying credentials for this very realm? Then
+          // those are the ones being turned down, and the viewer has to
+          // supply better ones.
+          var refused = !!(creds && creds.realm === err.realm);
+          if (refused) {
+            Auth.forget(err.realm);
+            Auth.notifySignOut(provider, err.realm);
+            renderSources();
+          } else {
+            var saved = Auth.stored(err.realm);
+            if (saved) {
+              return attempt(saved);
+            }
+          }
+
+          return Auth.ask(provider, err, refused).then(function(got) {
+            if (!got) {
+              return CANCELLED;
+            }
+            renderSources();
+            return attempt(got);
+          });
+        });
+    }
+    return attempt(null);
   }
 
   function openFolder(provider, id, crumb) {
     busy(true);
-    call(provider.browse, id)
+    call(provider, provider.browse, id)
       .then(function(entries) {
+        if (entries === CANCELLED) {
+          return;
+        }
         state.stack.push({provider: provider, id: id, crumb: crumb,
                           entries: entries || [], sel: 0});
         showView("browse");
@@ -336,8 +433,12 @@
 
     var provider = top().provider;
     busy(true);
-    call(provider.resolve, entry.id)
-      .then(play)
+    call(provider, provider.resolve, entry.id)
+      .then(function(url) {
+        if (url !== CANCELLED) {
+          play(url);
+        }
+      })
       .catch(function(err) {
         console.error(err);
         toast("" + (err.message || err));
@@ -466,6 +567,9 @@
     case KEY.CROSS:
       var p = state.providers[state.selSource];
       openFolder(p, "", p.name);
+      break;
+    case KEY.SQUARE:
+      signOutSource();
       break;
     }
   }

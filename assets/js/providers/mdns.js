@@ -1,7 +1,56 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Servers announced over mDNS, browsed through the smb proxy in srv.c.
+//
+// Credentials go to the proxy as query parameters, which it forwards to
+// libsmb2. A share that turns them down comes back as 401 or 403, and that
+// is what makes this plugin ask: it throws Auth.required() and the shell
+// takes care of the dialog and the retry.
+//
+// One login covers a whole server rather than a folder, so the realm is the
+// server uri. Browsing deeper into a share reuses what the viewer already
+// typed instead of asking again per directory.
 
 export default function init(ctx) {
     const ICON = "💻";
+
+    // Server uri -> credentials the shell handed us for it. Holding these for
+    // the session means only the first request to a server pays for being
+    // refused first; everything after goes out authenticated straight away.
+    const sessions = {};
+
+    // The server a path belongs to, which is also its realm. Ids are absolute
+    // smb: uris, so the origin is the part before the path.
+    function realmOf(id) {
+	const uri = new URL(id);
+	return uri.protocol + "//" + uri.host;
+    }
+
+    function needSignIn(id, user) {
+	const realm = realmOf(id);
+	// Whatever we were using is no good, so drop it rather than sending it
+	// again on the retry.
+	delete sessions[realm];
+	return Auth.required({
+	    realm: realm,
+	    title: "Sign in to " + new URL(id).hostname,
+	    prompt: "This server asks for a username and password.",
+	    user: user || ""
+	});
+    }
+
+    // Credentials to use for `id`: whatever the shell just handed us, or what
+    // it handed us earlier in the session. Credentials are tagged with the
+    // realm they were issued for, so a password for one server is never sent
+    // to another.
+    function credsFor(id, creds) {
+	const realm = realmOf(id);
+	if (creds && creds.realm === realm) {
+	    sessions[realm] = creds;
+	    return creds;
+	}
+	return sessions[realm] || null;
+    }
 
     function resolveId(id, creds) {
 	if (!id) {
@@ -19,30 +68,26 @@ export default function init(ctx) {
 	    url += uri.pathname;
 	}
 
-	url += "?addr=" + uri.hostname;
-	url += "&port=" + uri.port;
+	url += "?addr=" + encodeURIComponent(uri.hostname);
+	url += "&port=" + encodeURIComponent(uri.port);
 
-	if(creds && creds.user) {
-	    url += "&user=" + creds.user;
+	// Passwords are arbitrary text and routinely contain characters that
+	// mean something in a query string, so both parts are escaped.
+	const use = credsFor(id, creds);
+	if(use && use.user) {
+	    url += "&user=" + encodeURIComponent(use.user);
 	}
-	if(creds && creds.pass) {
-	    url += "&pass=" + creds.pass;
+	if(use && use.pass) {
+	    url += "&pass=" + encodeURIComponent(use.pass);
 	}
-	console.log(url);
 	return url;
     }
 
     async function fetchListing(id, creds) {
-	console.log(id);
 	var res = await fetch(resolveId(id, creds));
 	if(!res.ok) {
-	    if(res.status == 401 || res.status == 403) {
-		throw Auth.required({
-		    realm: id,
-		    title: id,
-		    prompt: "Promt",
-		    user: ""
-		});
+	    if(Auth.refused(res)) {
+		throw needSignIn(id, creds && creds.user);
 	    } else {
 		throw new Error("SMB: " + res.status);
 	    }
@@ -53,8 +98,7 @@ export default function init(ctx) {
 	    const name = item.name;
 	    const type = item.mode == "d" ? "folder" : "file";
 	    const uri = id + "/" + item.name;
-	    const desc = uri;
-	    
+
 	    return {
 		id: uri,
 		type: type,
@@ -81,15 +125,20 @@ export default function init(ctx) {
 		name: name,
 		detail: uri,
 		icon: ICON,
-		browse: async function(id) {
+		browse: async function(id, creds) {
 		    if(!id) {
-			return fetchListing(uri);
+			return fetchListing(uri, creds);
 		    } else {
-			return fetchListing(id);
+			return fetchListing(id, creds);
 		    }
 		},
-		resolve: async function(id) {
-		    return resolveId(id);
+		resolve: async function(id, creds) {
+		    return resolveId(id, creds);
+		},
+		// The shell drops credentials on sign-out or refusal; drop the
+		// cached copy too, or the session outlives them.
+		signOut: function(realm) {
+		    delete sessions[realm];
 		}
 	    };
 	});

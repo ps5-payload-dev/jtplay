@@ -60,6 +60,7 @@
 	<span class="chip"><img class="key-icon" src="icons/cross.png"/>&nbsp;Select</span>
 	<span class="chip"><img class="key-icon" src="icons/circle.png"/>&nbsp;Back</span>
 	<span class="chip" id="hint-refresh"><img class="key-icon" src="icons/triangle.png"/>&nbsp;Refresh</span>
+	<span class="chip hidden" id="hint-signout"><img class="key-icon" src="icons/square.png"/>&nbsp;Sign out</span>
       </div>
     </div>
 
@@ -94,6 +95,52 @@
     </div>
 
     <div id="toast"></div>
+
+    <!-- ====================== Sign in ====================== -->
+    <div id="auth-overlay">
+      <div id="auth-dialog">
+	<div class="auth-head">
+          <div class="auth-lock">&#128274;</div>
+          <div class="auth-heading">
+            <div class="auth-title" id="auth-title"></div>
+            <div class="auth-sub" id="auth-sub"></div>
+          </div>
+	</div>
+
+	<div class="auth-error" id="auth-error"></div>
+
+	<div class="auth-field" id="auth-row-user">
+          <div class="auth-label">Username</div>
+          <input class="auth-input" id="auth-user" type="text"
+		 autocapitalize="off" autocorrect="off" spellcheck="false"/>
+	</div>
+
+	<div class="auth-field" id="auth-row-pass">
+          <div class="auth-label">Password</div>
+          <input class="auth-input" id="auth-pass" type="password"
+		 autocapitalize="off" autocorrect="off" spellcheck="false"/>
+	</div>
+
+	<div class="auth-check" id="auth-row-remember">
+          <div class="auth-box" id="auth-remember-box"></div>
+          <div class="auth-check-label">Remember me on this console</div>
+	</div>
+
+	<div class="auth-buttons">
+          <div class="auth-btn" id="auth-row-ok">Sign in</div>
+          <div class="auth-btn" id="auth-row-cancel">Cancel</div>
+	</div>
+
+	<div class="auth-hints">
+          <span class="chip"><img class="key-icon" src="icons/cross.png"/><span id="auth-hint-x">&nbsp;Edit</span></span>
+          <span class="chip"><img class="key-icon" src="icons/dpad.png"/>&nbsp;Move</span>
+          <span class="chip"><img class="key-icon" src="icons/circle.png"/>&nbsp;Cancel</span>
+	</div>
+      </div>
+    </div>
+
+    <!-- Plugins reach Auth as a global, so it has to be in place first. -->
+    <script src="js/auth.js"></script>
     <script src="js/plugins.js"></script>
     <script src="js/app.js"></script>
   </body>

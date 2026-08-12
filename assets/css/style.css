@@ -456,3 +456,180 @@ body.paused .np-state { display: block; }
   border-radius: 12px;
 }
 #toast.on { display: block; }
+
+/* ------------------------------------------------------------------ */
+/* Sign in                                                            */
+/* ------------------------------------------------------------------ */
+
+/* Sits above everything, including the video layer, so a provider can ask
+   for credentials mid-playback if a stream ever expires. */
+#auth-overlay {
+  position: absolute;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(6,9,16,0.86);
+}
+#auth-overlay.on { display: flex; }
+
+#auth-dialog {
+  width: 880px;
+  padding: 52px 56px 40px 56px;
+  background-color: #101827;
+  border: 2px solid rgba(255,255,255,0.10);
+  border-radius: 22px;
+}
+
+.auth-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.auth-lock {
+  width: 84px;
+  font-size: 46px;
+  flex: none;
+}
+
+.auth-heading { flex: 1; overflow: hidden; }
+
+.auth-title {
+  font-size: 40px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.auth-sub {
+  margin-top: 6px;
+  font-size: 23px;
+  line-height: 1.4em;
+  color: #8593ab;
+}
+
+.auth-error {
+  display: none;
+  margin-bottom: 26px;
+  padding: 16px 22px;
+  font-size: 23px;
+  color: #ff9d94;
+  background-color: rgba(255,122,112,0.10);
+  border-left: 5px solid #ff7a70;
+  border-radius: 8px;
+}
+.auth-error.on { display: block; }
+
+/* Fields and rows share the selection treatment used by the lists. */
+.auth-field {
+  padding: 14px 22px;
+  margin-bottom: 12px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+}
+.auth-field.selected {
+  background-color: rgba(77,214,184,0.10);
+  border-color: #4dd6b8;
+}
+
+.auth-label {
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #5a6478;
+}
+.auth-field.selected .auth-label { color: #4dd6b8; }
+
+.auth-input {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 4px 0;
+  font-family: inherit;
+  font-size: 30px;
+  color: #e8edf7;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid rgba(255,255,255,0.14);
+  outline: none;
+  caret-color: #4dd6b8;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.auth-field.editing .auth-input { border-bottom-color: #4dd6b8; }
+
+.auth-check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin: 18px 0 4px 0;
+  padding: 14px 22px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+}
+.auth-check.selected {
+  background-color: rgba(77,214,184,0.10);
+  border-color: #4dd6b8;
+}
+
+.auth-box {
+  width: 30px;
+  height: 30px;
+  margin-right: 18px;
+  flex: none;
+  background-color: rgba(255,255,255,0.05);
+  border: 2px solid rgba(255,255,255,0.20);
+  border-radius: 6px;
+}
+.auth-box.on {
+  background-color: #4dd6b8;
+  border-color: #4dd6b8;
+}
+
+.auth-check-label { font-size: 23px; color: #aab6cc; }
+
+.auth-buttons {
+  display: flex;
+  flex-direction: row;
+  margin-top: 26px;
+}
+
+.auth-btn {
+  padding: 16px 44px;
+  margin-right: 16px;
+  font-size: 26px;
+  font-weight: bold;
+  color: #aab6cc;
+  background-color: rgba(255,255,255,0.05);
+  border: 2px solid transparent;
+  border-radius: 12px;
+}
+.auth-btn.selected {
+  color: #0d1322;
+  background-color: #4dd6b8;
+  border-color: #4dd6b8;
+}
+
+.auth-hints {
+  margin-top: 30px;
+  white-space: nowrap;
+}
+.auth-hints .chip { margin-right: 14px; }
+
+/* Account badge on a source that has a login. */
+.srclock {
+  margin-left: 24px;
+  padding: 8px 18px;
+  font-size: 20px;
+  color: #4dd6b8;
+  background-color: rgba(77,214,184,0.10);
+  border-radius: 8px;
+  white-space: nowrap;
+  flex: none;
+}
+.srclock.hidden { display: none; }

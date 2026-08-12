@@ -122,7 +122,10 @@
         : function(eid) {
             return Promise.reject(
               new Error(name + " cannot resolve " + eid));
-          }
+          },
+      // Optional: told which realm went when the shell drops credentials, so
+      // a provider caching something derived from them can let it go.
+      signOut: typeof p.signOut === "function" ? p.signOut.bind(p) : null
     };
   }
 
