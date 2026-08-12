@@ -23,9 +23,6 @@ along with this program; see the file COPYING. If not, see
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#include <sys/sysctl.h>
-#include <sys/syscall.h>
-
 #include <microhttpd.h>
 
 #include "asset.h"
@@ -37,10 +34,10 @@ along with this program; see the file COPYING. If not, see
  *
  **/
 static enum MHD_Result
-http_on_request(void *cls, struct MHD_Connection *conn,
-		const char *url, const char *method,
-		const char *version, const char *upload_data,
-		size_t *upload_data_size, void **con_cls) {
+srv_on_request(void *cls, struct MHD_Connection *conn,
+	       const char *url, const char *method,
+	       const char *version, const char *upload_data,
+	       size_t *upload_data_size, void **con_cls) {
   if(strcmp(method, MHD_HTTP_METHOD_GET)) {
     return MHD_NO;
   }
@@ -58,11 +55,9 @@ http_on_request(void *cls, struct MHD_Connection *conn,
 }
 
 
-/**
- *
- **/
+
 int
-http_serve(uint16_t port) {
+srv_serve(uint16_t port) {
   struct sockaddr_in server_addr;
   struct sockaddr_in client_addr;
   struct MHD_Daemon *httpd;
@@ -101,7 +96,7 @@ http_serve(uint16_t port) {
   if(!(httpd=MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION | MHD_USE_ITC |
 			      MHD_USE_NO_LISTEN_SOCKET | MHD_USE_DEBUG |
 			      MHD_USE_INTERNAL_POLLING_THREAD,
-			      0, NULL, NULL, &http_on_request, NULL,
+			      0, NULL, NULL, &srv_on_request, NULL,
                               MHD_OPTION_NOTIFY_COMPLETED, NULL,
                               NULL, MHD_OPTION_END))) {
     perror("MHD_start_daemon");
@@ -128,72 +123,3 @@ http_serve(uint16_t port) {
   return close(srvfd);
 }
 
-
-/**
- * Fint the pid of a process with the given name.
- **/
-static pid_t
-find_pid(const char* name) {
-  int mib[4] = {1, 14, 8, 0};
-  pid_t mypid = getpid();
-  pid_t pid = -1;
-  size_t buf_size;
-  uint8_t *buf;
-
-  if(sysctl(mib, 4, 0, &buf_size, 0, 0)) {
-    perror("sysctl");
-    return -1;
-  }
-
-  if(!(buf=malloc(buf_size))) {
-    perror("malloc");
-    return -1;
-  }
-
-  if(sysctl(mib, 4, buf, &buf_size, 0, 0)) {
-    perror("sysctl");
-    free(buf);
-    return -1;
-  }
-
-  for(uint8_t *ptr=buf; ptr<(buf+buf_size);) {
-    int ki_structsize = *(int*)ptr;
-    pid_t ki_pid = *(pid_t*)&ptr[72];
-    char *ki_tdname = (char*)&ptr[447];
-
-    ptr += ki_structsize;
-    if(!strcmp(name, ki_tdname) && ki_pid != mypid) {
-      pid = ki_pid;
-    }
-  }
-
-  free(buf);
-
-  return pid;
-}
-
-
-int
-main(int argc, char** argv) {
-  const uint16_t port = 8088;
-  pid_t pid;
-
-  syscall(SYS_thr_set_name, -1, "jtplay-srv.elf");
-  signal(SIGPIPE, SIG_IGN);
-
-  while((pid=find_pid("jtplay-srv.elf")) > 0) {
-    if(kill(pid, SIGKILL)) {
-      perror("kill");
-      return -1;
-    }
-    sleep(1);
-  }
-
-  while(1) {
-    mdns_discovery_start();
-    http_serve(port);
-    sleep(3);
-  }
-
-  return 0;
-}

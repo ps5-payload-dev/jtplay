@@ -18,7 +18,7 @@ PYTHON := python3
 
 CFLAGS := -Wall -Werror
 
-SRCS := src/srv.c src/mime.c src/asset.c src/mdns.c src/smb.c
+SRCS := src/main-pc.c src/srv.c src/mime.c src/asset.c src/mdns.c src/smb.c
 
 LDADD  += `pkg-config libmicrohttpd --libs`
 LDADD  += `pkg-config microdns --libs`
