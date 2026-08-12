@@ -1,15 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//
-// SVT Play, the video service of Swedish public service television.
-// Browser port of jtplay's plugins/svtplay.js.
-//
-// Listings come from SVT's Contento GraphQL endpoint, which only accepts
-// *persisted* queries: the client sends the sha256 of a query document the
-// server already knows, never the document itself. The hashes below are the
-// ones svtplay.se uses; when SVT retires one the API answers with
-// "PersistedQueryNotFound" and that listing stops working until the hash is
-// refreshed. Playback goes through the separate video API, which mints
-// short-lived manifest URLs, hence resolve() rather than a uri per entry.
 
 export default function init(ctx) {
     var VIDEO_API = "https://api.svt.se/video/";
@@ -481,83 +470,80 @@ export default function init(ctx) {
 	if (!url) {
 	    throw new Error("empty stream url for " + svtId);
 	}
-	console.log("playing " + best.format + ": " + url);
 	return url;
     }
 
-    var provider = {
-	name: "SVT Play",
-	detail: "TV from Swedish public service",
-	icon: "\uD83D\uDCFA", // 📺
-
-	browse: function(id) {
-	    if (!id) {
-		var rows = START_ROWS.map(function(row) {
-		    return {id: row[0], type: "folder", name: row[1], description: row[2]};
-		});
-		return Promise.resolve([{
-		    id: "channels",
-		    type: "folder",
-		    name: "Kanaler",
-		    description: "Direkts\u00e4ndning"
-		}].concat(rows, [{
-		    id: "programs",
-		    type: "folder",
-		    name: "Program A-\u00d6",
-		    description: "Hela utbudet"
-		}, {
-		    id: "genres",
-		    type: "folder",
-		    name: "Genrer",
-		    description: "Bl\u00e4ddra efter kategori"
-		}]));
-	    }
-
-	    if (id === "channels") {
-		return fetchChannels();
-	    }
-	    if (id === "programs") {
-		return fetchProgramLetters();
-	    }
-	    if (id === "genres") {
-		return fetchGenres();
-	    }
-
-	    var row = START_ROWS.filter(function(r) { return r[0] === id; })[0];
-	    if (row) {
-		return fetchSelection(row[3]);
-	    }
-
-	    if (id.indexOf("programs:") === 0) {
-		return fetchProgramsByLetter(id.substring("programs:".length));
-	    }
-	    if (id.indexOf("genre:") === 0) {
-		return fetchGenre(id.substring("genre:".length));
-	    }
-	    if (id.indexOf("show:") === 0) {
-		var rest = id.substring("show:".length);
-		var bar = rest.indexOf("|");
-		return bar < 0
-		    ? fetchShow(rest)
-		    : fetchShow(rest.substring(0, bar), rest.substring(bar + 1));
-	    }
-
-	    console.warn("cannot browse " + id);
-	    return Promise.resolve([]);
-	},
-
-	resolve: async function(id) {
-	    if (id.indexOf("video:") === 0) {
-		return resolveStream(id.substring("video:".length));
-	    }
-	    if (id.indexOf("path:") === 0) {
-		return resolveStream(await svtIdForPath(id.substring("path:".length)));
-	    }
-	    return resolveStream(id);
-	}
-    };
-
     return async function discover() {
-	return [provider];
-    };
+	return [{
+	    id: "https://svtplay.se",
+	    name: "SVT Play",
+	    detail: "TV from Swedish public service",
+	    icon: "📺",
+	    browse: function(id) {
+		if (!id) {
+		    var rows = START_ROWS.map(function(row) {
+			return {id: row[0], type: "folder", name: row[1], description: row[2]};
+		    });
+		    return Promise.resolve([{
+			id: "channels",
+			type: "folder",
+			name: "Kanaler",
+			description: "Direkts\u00e4ndning"
+		    }].concat(rows, [{
+			id: "programs",
+			type: "folder",
+			name: "Program A-\u00d6",
+			description: "Hela utbudet"
+		    }, {
+			id: "genres",
+			type: "folder",
+			name: "Genrer",
+			description: "Bl\u00e4ddra efter kategori"
+		    }]));
+		}
+
+		if (id === "channels") {
+		    return fetchChannels();
+		}
+		if (id === "programs") {
+		    return fetchProgramLetters();
+		}
+		if (id === "genres") {
+		    return fetchGenres();
+		}
+
+		var row = START_ROWS.filter(function(r) { return r[0] === id; })[0];
+		if (row) {
+		    return fetchSelection(row[3]);
+		}
+
+		if (id.indexOf("programs:") === 0) {
+		    return fetchProgramsByLetter(id.substring("programs:".length));
+		}
+		if (id.indexOf("genre:") === 0) {
+		    return fetchGenre(id.substring("genre:".length));
+		}
+		if (id.indexOf("show:") === 0) {
+		    var rest = id.substring("show:".length);
+		    var bar = rest.indexOf("|");
+		    return bar < 0
+			? fetchShow(rest)
+			: fetchShow(rest.substring(0, bar), rest.substring(bar + 1));
+		}
+
+		console.warn("cannot browse " + id);
+		return Promise.resolve([]);
+	    },
+
+	    resolve: async function(id) {
+		if (id.indexOf("video:") === 0) {
+		    return resolveStream(id.substring("video:".length));
+		}
+		if (id.indexOf("path:") === 0) {
+		    return resolveStream(await svtIdForPath(id.substring("path:".length)));
+		}
+		return resolveStream(id);
+	    }
+	}];
+    }
 }

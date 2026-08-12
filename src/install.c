@@ -54,6 +54,7 @@ int sceAppInstUtilAppUnInstall(const char*);
 
 INCASSET(param, "sce_sys/param.json");
 INCASSET(icon0, "sce_sys/icon0.png");
+INCASSET(srv, "jtplay-srv.elf");
 
 
 static int
@@ -151,6 +152,10 @@ main(int argc, char *argv[]) {
 
   if(mkdir("/user/app/"TITLE_ID, 0755) && errno != EEXIST) {
     perror("mkdir");
+    return -1;
+  }
+  if(install_file("/user/app/"TITLE_ID"/jtplay-srv.elf", srv, srv_size)) {
+    perror("install_file");
     return -1;
   }
   if(mkdir("/user/app/"TITLE_ID"/sce_sys", 0755) && errno != EEXIST) {

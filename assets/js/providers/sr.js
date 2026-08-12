@@ -5,6 +5,7 @@ export default function init(ctx) {
 
     return async function discover() {
 	return [{
+	    id: "https://sr.se",
 	    name: "Sveriges Radio",
 	    detail: "Live radio from Swedish public service",
 	    icon: "📻",

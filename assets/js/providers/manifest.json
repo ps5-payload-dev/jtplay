@@ -12,6 +12,12 @@
 	    "name": "SVT Play",
 	    "src": "svtplay.js",
 	    "enabled": true
+	},
+	{
+	    "id": "mdns",
+	    "name": "mDNS",
+	    "src": "mdns.js",
+	    "enabled": true
 	}
     ]
 }

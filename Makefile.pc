@@ -14,43 +14,29 @@
 # along with this program; see the file COPYING. If not see
 # <http://www.gnu.org/licenses/>.
 
-PS5_HOST ?= ps5
-PS5_PORT ?= 9021
+PYTHON := python3
 
-ifdef PS5_PAYLOAD_SDK
-    include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
-else
-    $(error PS5_PAYLOAD_SDK is undefined)
-endif
-
-CFLAGS := -Wall -Werror -DTITLE_ID="\"BREW10003\""
+CFLAGS := -Wall -Werror
 
 SRCS := src/srv.c src/mime.c src/asset.c src/mdns.c src/smb.c
 
-LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libmicrohttpd --libs`
-LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config microdns --libs`
-LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libsmb2 --libs`
+LDADD  += `pkg-config libmicrohttpd --libs`
+LDADD  += `pkg-config microdns --libs`
+LDADD  += `pkg-config libsmb2 --libs`
 
-all: jtplay-install.elf
+all: jtplay-srv.elf
 
 src/asset.c: src/asset_bundle.inc
 
 src/asset_bundle.inc:
 	$(PYTHON) tools/gen-asset-module.py assets > $@
 
-src/install.c: jtplay-srv.elf sce_sys/param.json sce_sys/icon0.png
-
 jtplay-srv.elf: $(SRCS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDADD)
 
-jtplay-install.elf: src/install.c
-	$(CC) $(CFLAGS) -lSceIpmi -lSceAppInstUtil -o $@ $^
+test: jtplay-srv.elf
+	./jtplay-srv.elf
 
 clean:
-	rm -f *.elf *.o
+	rm -rf *.elf *.o src/asset_bundle.inc
 
-test: jtplay-srv.elf
-	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $^
-
-install: jtplay-install.elf
-	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $^

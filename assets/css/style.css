@@ -1,9 +1,8 @@
 /*
- * Port of jtplay's rcss for the browser. Designed for a 1920x1080 context
- * viewed from the couch: large type, high contrast, generous spacing, and
- * an unmissable focus treatment. Palette is a deep blue-slate night
- * background with a sea-glass teal accent used exclusively for
- * focus/selection.
+ * Designed for a 1920x1080 context viewed from the couch: large type, high
+ * contrast, generous spacing, and  an unmissable focus treatment. Palette is a
+ * deep blue-slate night background with a sea-glass teal accent used
+ * exclusively for focus/selection.
  *
  *   background   #0a0e18 / #101827
  *   panel        #ffffff07 .. #ffffff14
