@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>JTPlay</title>
+  </head>
+  <body>
+    <script>
+      (async () => {
+	  const controller = new AbortController();
+	  try {
+              fetch(
+		  "http://127.0.0.1:9021/user/app/BREW10003/jtplay-srv.elf",
+		  {
+		      method: "GET",
+		      mode: "cors",
+		      signal: controller.signal,
+		      cache: "no-store"
+		  }
+              ).catch(() => {
+		  // Ignore request/CORS/network errors.
+              });
+
+              // Wait 1 second, then abort the request.
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              controller.abort();
+	  } finally {
+              window.location.href = "http://127.0.0.1:8088";
+	  }
+      })();
+    </script>
+  </body>
+</html>
+
