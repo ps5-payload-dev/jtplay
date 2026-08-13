@@ -26,10 +26,17 @@ endif
 CFLAGS := -Wall -Werror -DTITLE_ID="\"BREW10003\""
 
 SRCS := src/main-ps5.c src/srv.c src/mime.c src/asset.c src/mdns.c src/smb.c
+SRCS += src/viz.c
 
 LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libmicrohttpd --libs`
 LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config microdns --libs`
 LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libsmb2 --libs`
+LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libavcodec --libs`
+LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libavformat --libs`
+LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libswresample --libs`
+LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libswscale --libs`
+LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libavutil --libs`
+LDADD  += -lm
 
 all: jtplay-install.elf
 

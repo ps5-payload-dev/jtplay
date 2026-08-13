@@ -19,10 +19,17 @@ PYTHON := python3
 CFLAGS := -Wall -Werror
 
 SRCS := src/main-pc.c src/srv.c src/mime.c src/asset.c src/mdns.c src/smb.c
+SRCS += src/viz.c
 
 LDADD  += `pkg-config libmicrohttpd --libs`
 LDADD  += `pkg-config microdns --libs`
 LDADD  += `pkg-config libsmb2 --libs`
+LDADD  += `pkg-config libavcodec --libs`
+LDADD  += `pkg-config libavformat --libs`
+LDADD  += `pkg-config libswresample --libs`
+LDADD  += `pkg-config libswscale --libs`
+LDADD  += `pkg-config libavutil --libs`
+LDADD  += -lm
 
 all: jtplay-srv.elf
 

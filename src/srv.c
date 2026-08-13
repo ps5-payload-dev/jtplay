@@ -28,6 +28,7 @@ along with this program; see the file COPYING. If not, see
 #include "asset.h"
 #include "mdns.h"
 #include "smb.h"
+#include "viz.h"
 
 
 /**
@@ -47,6 +48,9 @@ srv_on_request(void *cls, struct MHD_Connection *conn,
   }
   if(!strncmp("/smb", url, 4)) {
     return smb_request(conn, url);
+  }
+  if(!strncmp("/viz", url, 4)) {
+    return viz_request(conn, url);
   }
   if(!strcmp("/", url) || !url[0]) {
     return asset_request(conn, "/index.html");
