@@ -28,6 +28,7 @@ along with this program; see the file COPYING. If not, see
 #include "asset.h"
 #include "fs.h"
 #include "mdns.h"
+#include "http.h"
 #include "smb.h"
 #include "ssdp.h"
 #include "viz.h"
@@ -53,6 +54,9 @@ srv_on_request(void *cls, struct MHD_Connection *conn,
   }
   if(!strncmp("/smb", url, 4)) {
     return smb_request(conn, url);
+  }
+  if(!strncmp("/http", url, 5)) {
+    return http_request(conn, url);
   }
   if(!strncmp("/fs/", url, 4)) {
     return fs_request(conn, url);
