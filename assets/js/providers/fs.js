@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 export default function init(ctx) {
-    const FS_URL = "http://127.0.0.1:8088/fs/";
+    const FS_URL = "/fs/";
 
     return async function discover() {
 	return [{
