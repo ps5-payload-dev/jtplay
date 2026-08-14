@@ -35,8 +35,8 @@ along with this program; see the file COPYING. If not, see
 /**
  * Video rendition of the audio spectrum.
  **/
-#define VIZ_WIDTH   960
-#define VIZ_HEIGHT  540
+#define VIZ_WIDTH   854
+#define VIZ_HEIGHT  480
 #define VIZ_FPS     30
 #define VIZ_DT      (1.0f / VIZ_FPS)
 
