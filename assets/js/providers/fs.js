@@ -3,6 +3,23 @@
 export default function init(ctx) {
     const FS_URL = "/fs/";
 
+    function itemType(item) {
+	if(item.mode == "d") {
+	    return "folder";
+	}
+
+	if(item.mime.startsWith("audio/")) {
+	    return "audio";
+	}
+	if(item.mime.startsWith("image/")) {
+	    return "image";
+	}
+	if(item.mime.startsWith("video/")) {
+	    return "video";
+	}
+	return "file";
+    }
+
     return async function discover() {
 	return [{
 	    id: "/",
@@ -20,7 +37,7 @@ export default function init(ctx) {
 		    .sort((a, b) => a.name.localeCompare(b.name))
 		    .map((item) => ({
 			id: id + '/' + item.name,
-			type: item.mode == "d" ? "folder" : "file",
+			type: itemType(item),
 			name: item.name
 		    }));
 	    },

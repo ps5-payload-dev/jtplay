@@ -159,6 +159,7 @@ static ssize_t
 dir_read(void *cls, uint64_t pos, char *buf, size_t max) {
   dir_read_sm_t* sm = (dir_read_sm_t*)cls;
   struct dirent *entry;
+  const char* mime;
   struct stat st;
 
   if(max < 512) {
@@ -173,7 +174,8 @@ dir_read(void *cls, uint64_t pos, char *buf, size_t max) {
 		    "\"name\": \".\","		\
 		    "\"mode\": \"d\","		\
 		    "\"mtime\": 0,"		\
-		    "\"size\": 0"		\
+		    "\"size\": 0,"		\
+		    "\"mime\": \"\""		\
 		    "}");
 
   case DIR_READ_BODY:
@@ -190,15 +192,20 @@ dir_read(void *cls, uint64_t pos, char *buf, size_t max) {
       return 0;
     }
 
+    if(!(mime=mime_get_type(entry->d_name))) {
+      mime = "";
+    }
+
     return snprintf(buf, max,
 		    ",{"\
 		    "\"name\": \"%s\","\
 		    "\"mode\": \"%c\","\
 		    "\"mtime\": %ld,"\
-		    "\"size\": %ld"\
+		    "\"size\": %ld,"\
+		    "\"mime\": \"%s\""\
 		    "}",
 		    entry->d_name, modechar(&st, sm->props.dev),
-		    st.st_mtim.tv_sec, st.st_size);
+		    st.st_mtim.tv_sec, st.st_size, mime);
 
   case DIR_READ_TAIL:
     sm->state = DIR_READ_NULL;

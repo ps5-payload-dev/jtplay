@@ -39,6 +39,23 @@ export default function init(ctx) {
 	});
     }
 
+    function itemType(item) {
+	if(item.mode == "d") {
+	    return "folder";
+	}
+
+	if(item.mime.startsWith("audio/")) {
+	    return "audio";
+	}
+	if(item.mime.startsWith("image/")) {
+	    return "image";
+	}
+	if(item.mime.startsWith("video/")) {
+	    return "video";
+	}
+	return "file";
+    }
+
     // Credentials to use for `id`: whatever the shell just handed us, or what
     // it handed us earlier in the session. Credentials are tagged with the
     // realm they were issued for, so a password for one server is never sent
@@ -99,7 +116,7 @@ export default function init(ctx) {
 	    .sort((a, b) => a.name.localeCompare(b.name))
 	    .map((item) => ({
 		id: id + "/" + item.name,
-		type: item.mode == "d" ? "folder" : "file",
+		type: itemType(item),
 		name: item.name
 	    }));
     }

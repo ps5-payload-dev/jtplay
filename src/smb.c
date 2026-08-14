@@ -144,11 +144,19 @@ smb_request_dir_read_cb(void *ctx, uint64_t pos, char *buf, size_t max) {
   struct smb2dirent* ent;
   struct smb2_stat_64 st;
   char path[PATH_MAX];
+  const char* mime;
   char mode = '-';
 
   if(args->state == 0) {
     args->state++;
-    return snprintf(buf, max, "[\n  {\"name\":\".\",\"mode\":\"d\",\"mtime\":0,\"size\":0}");
+    return snprintf(buf, max,
+		    "[{"			\
+		    "\"name\": \".\","		\
+		    "\"mode\": \"d\","		\
+		    "\"mtime\": 0,"		\
+		    "\"size\": 0,"		\
+		    "\"mime\": \"\""		\
+		    "}");
   }
 
   if(args->state == 2) {
@@ -194,8 +202,19 @@ smb_request_dir_read_cb(void *ctx, uint64_t pos, char *buf, size_t max) {
     break;
   }
 
-  return snprintf(buf, max, ",\n  {\"name\":\"%s\",\"mode\":\"%c\",\"mtime\":%lu,\"size\":%zu}",
-                  ent->name, mode, st.smb2_mtime, st.smb2_size);
+  if(!(mime=mime_get_type(ent->name))) {
+    mime = "";
+  }
+
+  return snprintf(buf, max,
+		  ",{"				\
+		  "\"name\": \"%s\","		\
+		  "\"mode\": \"%c\","		\
+		  "\"mtime\": %lu,"		\
+		  "\"size\": %zu,"		\
+		  "\"mime\": \"%s\""		\
+		  "}",
+                  ent->name, mode, st.smb2_mtime, st.smb2_size, mime);
 }
 
 
