@@ -60,4 +60,4 @@ test: jtplay-srv.elf
 	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $^
 
 install: jtplay-install.elf
-	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $^
+	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $^ &

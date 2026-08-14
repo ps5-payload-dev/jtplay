@@ -236,9 +236,13 @@
     });
     $("auth-remember-box").className =
       "auth-box" + (dlg.remember ? " on" : "");
-    // X opens the keyboard on a text field and acts everywhere else, so the
-    // hint says which one it is rather than going blank.
-    $("auth-hint-x").textContent = dlg.sel < 2 ? "\u00a0Edit" : "\u00a0Select";
+    // X opens the keyboard on a text field and acts everywhere else. The
+    // hint chip that used to surface this has been removed from the UI,
+    // but $ would throw on a missing id, so this is left as a no-op guard.
+    var xHint = $("auth-hint-x");
+    if (xHint) {
+      xHint.textContent = dlg.sel < 2 ? "\u00a0Edit" : "\u00a0Select";
+    }
   }
 
   function setError(msg) {

@@ -157,8 +157,11 @@
   function updateSourceHints() {
     var p = state.providers[state.selSource];
     var signedIn = !!(p && Auth.accounts(p).length);
-    $("hint-signout").className = "chip" +
-      (state.view === "sources" && signedIn ? "" : " hidden");
+    var el = $("hint-signout");
+    if (el) {
+      el.className = "chip" +
+        (state.view === "sources" && signedIn ? "" : " hidden");
+    }
   }
 
   // Drops every login the selected source holds, which is the only thing a
@@ -512,7 +515,10 @@
     }
     var can = seekable();
     $("watch-progress").className = "watch-progress" + (can ? "" : " hidden");
-    $("hint-seek").className = "chip" + (can ? "" : " hidden");
+    var seekHint = $("hint-seek");
+    if (seekHint) {
+      seekHint.className = "chip" + (can ? "" : " hidden");
+    }
     if (can) {
       $("watch-progress-bar").style.width =
         (100 * media.currentTime / media.duration) + "%";
