@@ -92,11 +92,13 @@
     updateSourceHints();
   }
 
+  // Entry types are drawn as images rather than spelled with emoji: the
+  // browser on the console has no font covering them.
   function icon(entry) {
-      if (entry.type === "folder") return "📁";
-      if (entry.type === "audio")  return "🎵";
-      if (entry.type === "video")  return "🎬";
-      else return "📄"
+      if (entry.type === "folder") return "icons/folder.png";
+      if (entry.type === "audio")  return "icons/audio.png";
+      if (entry.type === "video")  return "icons/video.png";
+      else return "icons/file.png"
   }
 
   function renderSources() {
@@ -106,9 +108,13 @@
     if (!state.providers.length) {
       var empty = document.createElement("div");
       empty.className = "empty";
-      empty.textContent = state.loading
-        ? "Looking for media providers\u2026"
-        : "No media providers. Press \u25B3 to try again.";
+      if (state.loading) {
+        empty.textContent = "Looking for media providers\u2026";
+      } else {
+        empty.innerHTML = 'No media providers. Press ' +
+          '<img class="key-icon" src="icons/triangle.png"/>' +
+          ' to try again.';
+      }
       list.appendChild(empty);
     }
 
@@ -116,11 +122,13 @@
       var row = document.createElement("div");
       row.className = "source-row" + (i === state.selSource ? " selected" : "");
       row.innerHTML =
-        '<div class="srcicon"></div>' +
+        '<div class="srcicon"><img/></div>' +
         '<div class="srcinfo"><div class="srcname"></div>' +
         '<div class="srcdetail"></div></div>' +
-        '<div class="srclock"></div>';
-      row.children[0].textContent = p.icon;
+        '<div class="srclock"><img src="icons/user.png"/><span></span></div>';
+      // The icon is a url the plugin chose, so it goes in as a property
+      // rather than as markup.
+      row.children[0].children[0].src = p.icon;
       row.children[1].children[0].textContent = p.name;
       row.children[1].children[1].textContent = p.detail;
 
@@ -133,9 +141,9 @@
         lock.className = "srclock hidden";
       } else {
         lock.className = "srclock";
-        lock.textContent = "\uD83D\uDC64 " + (accounts.length === 1 // 👤
+        lock.children[1].textContent = accounts.length === 1
           ? accounts[0].user
-          : accounts.length + " logins");
+          : accounts.length + " logins";
       }
 
       list.appendChild(row);
@@ -188,8 +196,8 @@
       row.className = "entry-row" +
         (e.type === "folder" ? " folder" : "") +
         (i === page.sel ? " selected" : "");
-      row.innerHTML = '<div class="eicon"></div><div class="etitle"></div>';
-      row.children[0].textContent = icon(e);
+      row.innerHTML = '<div class="eicon"><img/></div><div class="etitle"></div>';
+      row.children[0].children[0].src = icon(e);
       row.children[1].textContent = e.name;
       list.appendChild(row);
     });

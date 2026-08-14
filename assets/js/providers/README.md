@@ -18,7 +18,7 @@ export default function init(ctx) {
 		id: srv.id,
 		name: srv.title,
 		detail: srv.location,
-		icon: "\uD83D\uDCFA",
+		icon: "icons/tv.png",
 		browse: async function(id) { ... },
 		resolve: async function(id) { ... }
 	    };
@@ -37,7 +37,7 @@ export default function init(ctx) {
 | `browse`  | yes      | `(id, creds) -> entries`, called with `""` for the root         |
 | `id`      | no       | stable id within the plugin; keeps the cursor in place across a refresh, so prefer something durable over an array index |
 | `detail`  | no       | one line under the name                                         |
-| `icon`    | no       | one emoji                                                       |
+| `icon`    | no       | url of an image to show next to the name, relative to the page or absolute; `icons/` holds the ones the shell ships. Emoji are not used - the console's browser has no font for most of them |
 | `resolve` | no       | `(id, creds) -> url`, for entries without a `uri` (short-lived manifest urls, signed links, ...) |
 | `signOut` | no       | `(realm)`, told when the shell drops credentials; see below     |
 

@@ -54,7 +54,7 @@ jtplay-install.elf: src/install.c
 	$(CC) $(CFLAGS) -lSceIpmi -lSceAppInstUtil -o $@ $^
 
 clean:
-	rm -f *.elf *.o
+	rm -f *.elf *.o src/asset_bundle.inc
 
 test: jtplay-srv.elf
 	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $^

@@ -9,7 +9,7 @@ export default function init(ctx) {
 	    id: "https://sr.se",
 	    name: "Sveriges Radio",
 	    detail: "Live radio from Swedish public service",
-	    icon: "📻",
+	    icon: "icons/radio.png",
 	    browse: async function(id) {
 		const res = await fetch(API_URL + "/channels" +
 					"?format=json&pagination=false" +

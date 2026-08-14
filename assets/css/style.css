@@ -221,10 +221,18 @@ body.watching #shell { display: none; }
 
 .srcicon {
   width: 72px;
-  font-size: 44px;
-  text-align: center;
+  height: 52px;
   margin-right: 20px;
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Providers may name an icon of their own, so the box, rather than the file,
+   decides how big it comes out. */
+.srcicon img {
+  max-width: 52px;
+  max-height: 52px;
 }
 
 .srcinfo {
@@ -275,11 +283,14 @@ body.watching #shell { display: none; }
 
 .eicon {
   width: 56px;
-  font-size: 34px;
-  text-align: center;
+  height: 38px;
   margin-right: 18px;
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+.eicon img { width: 38px; height: 38px; }
 
 .etitle {
   flex: 1;
@@ -491,9 +502,9 @@ body.paused .np-state { display: block; }
 
 .auth-lock {
   width: 84px;
-  font-size: 46px;
   flex: none;
 }
+.auth-lock img { width: 54px; height: 54px; }
 
 .auth-heading { flex: 1; overflow: hidden; }
 
@@ -623,6 +634,9 @@ body.paused .np-state { display: block; }
 
 /* Account badge on a source that has a login. */
 .srclock {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
   margin-left: 24px;
   padding: 8px 18px;
   font-size: 20px;
@@ -630,6 +644,12 @@ body.paused .np-state { display: block; }
   background-color: rgba(77,214,184,0.10);
   border-radius: 8px;
   white-space: nowrap;
+  flex: none;
+}
+.srclock img {
+  width: 24px;
+  height: 24px;
+  margin-right: 10px;
   flex: none;
 }
 .srclock.hidden { display: none; }

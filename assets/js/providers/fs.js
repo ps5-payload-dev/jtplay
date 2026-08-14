@@ -7,7 +7,7 @@ export default function init(ctx) {
 	return [{
 	    id: "/",
 	    name: "Local filesystem",
-	    icon: "💾",
+	    icon: "icons/disk.png",
 	    browse: async function(id) {
 		const res = await fetch(FS_URL + id);
 		if (!res.ok) {

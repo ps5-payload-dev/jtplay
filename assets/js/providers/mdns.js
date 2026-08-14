@@ -12,7 +12,7 @@
 // typed instead of asking again per directory.
 
 export default function init(ctx) {
-    const ICON = "💻";
+    const ICON = "icons/computer.png";
 
     // Server uri -> credentials the shell handed us for it. Holding these for
     // the session means only the first request to a server pays for being

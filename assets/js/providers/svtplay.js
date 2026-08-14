@@ -478,7 +478,7 @@ export default function init(ctx) {
 	    id: "https://svtplay.se",
 	    name: "SVT Play",
 	    detail: "TV from Swedish public service",
-	    icon: "📺",
+	    icon: "icons/tv.png",
 	    browse: function(id) {
 		if (!id) {
 		    var rows = START_ROWS.map(function(row) {

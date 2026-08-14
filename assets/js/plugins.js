@@ -18,7 +18,7 @@
 //           id: srv.id,                           // stable within the plugin
 //           name: srv.title,
 //           detail: srv.description,
-//           icon: "\uD83D\uDCFA",
+//           icon: "icons/tv.png",                 // image url, see providers/README.md
 //           browse: async function(id) { ... },   // [] of entries
 //           resolve: async function(id) { ... }   // playable url, optional
 //         };
@@ -35,9 +35,27 @@
   "use strict";
 
   var MANIFEST_URL = "js/providers/manifest.json";
-  var DEFAULT_ICON = "\uD83D\uDCE1"; // 📡
+  var DEFAULT_ICON = "icons/antenna.png";
 
   var pending = null;
+
+  // A provider icon is a url, relative to the page or absolute, so a plugin
+  // may ship its own artwork or point at the service's. Emoji used to be the
+  // way to name one, but the console's browser has no font for most of them;
+  // anything that is not an image url falls back to the default rather than
+  // going out as a request that can only 404.
+  function iconUrl(icon) {
+    if (typeof icon !== "string") {
+      return DEFAULT_ICON;
+    }
+    var url = icon.trim();
+    if (/^data:image\//i.test(url)) {
+      return url;
+    }
+    return /\.(png|jpe?g|gif|svg|webp)([?#]|$)/i.test(url)
+      ? url
+      : DEFAULT_ICON;
+  }
 
   // Appended to every request so a refresh really re-fetches the manifest and
   // re-evaluates the modules instead of reusing the module map / http cache.
@@ -115,7 +133,7 @@
       id: id,
       name: name,
       detail: p.detail == null ? "" : String(p.detail),
-      icon: p.icon || DEFAULT_ICON,
+      icon: iconUrl(p.icon),
       browse: p.browse.bind(p),
       resolve: typeof p.resolve === "function"
         ? p.resolve.bind(p)
