@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Servers announced over mDNS, browsed through the smb proxy in srv.c.
+// SMB servers announced over mDNS, browsed through the smb proxy in srv.c.
 //
 // Credentials go to the proxy as query parameters, which it forwards to
 // libsmb2. A share that turns them down comes back as 401 or 403, and that

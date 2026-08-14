@@ -8,9 +8,9 @@
 	    "enabled": true
 	},
 	{
-	    "id": "mdns",
-	    "name": "mDNS",
-	    "src": "mdns.js",
+	    "id": "smb",
+	    "name": "SMB",
+	    "src": "smb.js",
 	    "enabled": true
 	},
 	{
