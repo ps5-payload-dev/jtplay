@@ -171,7 +171,8 @@
     if (!Array.isArray(found)) {
       found = [found];   // a plugin with exactly one provider may return it bare
     }
-    return found.map(function(p, i) { return normalizeProvider(p, entry, i); });
+      return found.map(function(p, i) { return normalizeProvider(p, entry, i); })
+	  .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   // Full rediscovery: manifest, modules, providers. Never rejects; whatever
