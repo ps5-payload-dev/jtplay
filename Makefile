@@ -26,7 +26,7 @@ endif
 CFLAGS := -Wall -Werror -DTITLE_ID="\"BREW10003\""
 
 SRCS := src/main-ps5.c src/srv.c src/mime.c src/asset.c src/mdns.c src/smb.c
-SRCS += src/fs.c src/viz.c
+SRCS += src/fs.c src/ssdp.c src/viz.c
 
 LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libmicrohttpd --libs`
 LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config microdns --libs`

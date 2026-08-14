@@ -14,27 +14,25 @@ You should have received a copy of the GNU General Public License
 along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
-#include <signal.h>
-#include <stdint.h>
+#pragma once
 
-#include "mdns.h"
-#include "srv.h"
-#include "ssdp.h"
+#include <microhttpd.h>
 
 
-int
-main(int argc, char** argv) {
-  const uint16_t port = 8088;
+/**
+ * Start the SSDP service discovery.
+ **/
+int ssdp_discovery_start(void);
 
-  signal(SIGPIPE, SIG_IGN);
 
-  mdns_discovery_start();
-  ssdp_discovery_start();
+/**
+ * Stop the SSDP service discovery.
+ **/
+int ssdp_discovery_stop(void);
 
-  srv_serve(port);
 
-  mdns_discovery_stop();
-  ssdp_discovery_stop();
-
-  return 0;
-}
+/**
+ * Respond to a SSDP discovery request.
+ **/
+enum MHD_Result ssdp_request(struct MHD_Connection *conn,
+                             const char* url);

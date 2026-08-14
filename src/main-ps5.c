@@ -25,6 +25,7 @@ along with this program; see the file COPYING. If not, see
 
 #include "mdns.h"
 #include "srv.h"
+#include "ssdp.h"
 
 
 /**
@@ -89,8 +90,13 @@ main(int argc, char** argv) {
 
   while(1) {
     mdns_discovery_start();
+    ssdp_discovery_start();
+
     srv_serve(port);
     sleep(3);
+
+    mdns_discovery_stop();
+    ssdp_discovery_stop();
   }
 
   return 0;
