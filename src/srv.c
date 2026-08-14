@@ -26,6 +26,7 @@ along with this program; see the file COPYING. If not, see
 #include <microhttpd.h>
 
 #include "asset.h"
+#include "fs.h"
 #include "mdns.h"
 #include "smb.h"
 #include "viz.h"
@@ -48,6 +49,9 @@ srv_on_request(void *cls, struct MHD_Connection *conn,
   }
   if(!strncmp("/smb", url, 4)) {
     return smb_request(conn, url);
+  }
+  if(!strncmp("/fs/", url, 4)) {
+    return fs_request(conn, url);
   }
   if(!strncmp("/viz", url, 4)) {
     return viz_request(conn, url);

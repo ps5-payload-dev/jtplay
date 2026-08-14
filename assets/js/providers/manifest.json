@@ -2,6 +2,18 @@
     "version": 1,
     "plugins": [
 	{
+	    "id": "fs",
+	    "name": "filesystem",
+	    "src": "fs.js",
+	    "enabled": true
+	},
+	{
+	    "id": "mdns",
+	    "name": "mDNS",
+	    "src": "mdns.js",
+	    "enabled": true
+	},
+	{
 	    "id": "sr",
 	    "name": "Sveriges Radio",
 	    "src": "sr.js",
@@ -11,12 +23,6 @@
 	    "id": "svtplay",
 	    "name": "SVT Play",
 	    "src": "svtplay.js",
-	    "enabled": true
-	},
-	{
-	    "id": "mdns",
-	    "name": "mDNS",
-	    "src": "mdns.js",
 	    "enabled": true
 	}
     ]
