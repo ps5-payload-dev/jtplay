@@ -94,19 +94,14 @@ export default function init(ctx) {
 	}
 
 	var items = (await res.json()) || [];
-	return items.map(function(item) {
-	    const name = item.name;
-	    const type = item.mode == "d" ? "folder" : "file";
-	    const uri = id + "/" + item.name;
-
-	    return {
-		id: uri,
-		type: type,
-		name: name
-	    };
-	}).filter(function(item) {
-	    return item.name != "." && item.name != "IPC$";
-	});
+	return items
+	    .filter((item) => item.name != "." && item.name != "IPC$")
+	    .sort((a, b) => a.name.localeCompare(b.name))
+	    .map((item) => ({
+		id: id + "/" + item.name,
+		type: item.mode == "d" ? "folder" : "file",
+		name: item.name
+	    }));
     }
 
     return async function discover() {

@@ -93,9 +93,10 @@
   }
 
   function icon(entry) {
-    if (entry.type === "folder") return "\uD83D\uDCC1"; // 📁
-    if (entry.type === "audio")  return "\uD83C\uDFB5"; // 🎵
-    return "\uD83C\uDFAC";                              // 🎬
+      if (entry.type === "folder") return "📁";
+      if (entry.type === "audio")  return "🎵";
+      if (entry.type === "video")  return "🎬";
+      else return "📄"
   }
 
   function renderSources() {
