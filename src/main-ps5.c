@@ -88,6 +88,7 @@ main(int argc, char** argv) {
     sleep(1);
   }
 
+  setenv("CURL_CA_BUNDLE", "/user/app/"TITLE_ID"/ca-bundle.crt", 0);
   while(1) {
     mdns_discovery_start();
     ssdp_discovery_start();

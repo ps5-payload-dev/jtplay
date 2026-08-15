@@ -23,7 +23,10 @@ else
     $(error PS5_PAYLOAD_SDK is undefined)
 endif
 
+CABUNDLE=$(PS5_PAYLOAD_SDK)/target/user/homebrew/etc/ca-bundle.crt
+
 CFLAGS := -Wall -Werror -DTITLE_ID="\"BREW10003\""
+CFLAGS += -DCABUNDLE="\"$(CABUNDLE)\""
 
 SRCS := src/main-ps5.c src/srv.c src/mime.c src/asset.c src/mdns.c src/smb.c
 SRCS += src/http.c src/fs.c src/ssdp.c src/viz.c

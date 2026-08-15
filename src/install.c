@@ -56,6 +56,7 @@ INCASSET(param, "sce_sys/param.json");
 INCASSET(icon0, "sce_sys/icon0.png");
 INCASSET(pic1, "sce_sys/pic1.png");
 INCASSET(srv, "jtplay-srv.elf");
+INCASSET(cabundle, CABUNDLE);
 
 
 static int
@@ -153,6 +154,10 @@ main(int argc, char *argv[]) {
 
   if(mkdir("/user/app/"TITLE_ID, 0755) && errno != EEXIST) {
     perror("mkdir");
+    return -1;
+  }
+  if(install_file("/user/app/"TITLE_ID"/ca-bundle.crt", cabundle, cabundle_size)) {
+    perror("install_file");
     return -1;
   }
   if(install_file("/user/app/"TITLE_ID"/jtplay-srv.elf", srv, srv_size)) {
