@@ -42,32 +42,33 @@ srv_on_request(void *cls, struct MHD_Connection *conn,
 	       const char *url, const char *method,
 	       const char *version, const char *upload_data,
 	       size_t *upload_data_size, void **con_cls) {
-  if(strcmp(method, MHD_HTTP_METHOD_GET)) {
-    return MHD_NO;
+  if(!strcmp(method, MHD_HTTP_METHOD_GET) ||
+     !strcmp(method, MHD_HTTP_METHOD_HEAD)) {
+    if(!strcmp("/mdns", url)) {
+      return mdns_request(conn, url);
+    }
+    if(!strcmp("/ssdp", url)) {
+      return ssdp_request(conn, url);
+    }
+    if(!strncmp("/smb", url, 4)) {
+      return smb_request(conn, url);
+    }
+    if(!strncmp("/http", url, 5)) {
+      return http_request(conn, url);
+    }
+    if(!strncmp("/fs/", url, 4)) {
+      return fs_request(conn, url);
+    }
+    if(!strncmp("/viz", url, 4)) {
+      return viz_request(conn, url);
+    }
+    if(!strcmp("/", url) || !url[0]) {
+      return asset_request(conn, "/index.html");
+    }
+    return asset_request(conn, url);
   }
 
-  if(!strcmp("/mdns", url)) {
-    return mdns_request(conn, url);
-  }
-  if(!strcmp("/ssdp", url)) {
-    return ssdp_request(conn, url);
-  }
-  if(!strncmp("/smb", url, 4)) {
-    return smb_request(conn, url);
-  }
-  if(!strncmp("/http", url, 5)) {
-    return http_request(conn, url);
-  }
-  if(!strncmp("/fs/", url, 4)) {
-    return fs_request(conn, url);
-  }
-  if(!strncmp("/viz", url, 4)) {
-    return viz_request(conn, url);
-  }
-  if(!strcmp("/", url) || !url[0]) {
-    return asset_request(conn, "/index.html");
-  }
-  return asset_request(conn, url);
+  return MHD_NO;
 }
 
 
