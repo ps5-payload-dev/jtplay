@@ -17,6 +17,8 @@ along with this program; see the file COPYING. If not, see
 #include <signal.h>
 #include <stdint.h>
 
+#include <curl/curl.h>
+
 #include "mdns.h"
 #include "srv.h"
 #include "ssdp.h"
@@ -27,6 +29,11 @@ main(int argc, char** argv) {
   const uint16_t port = 8088;
 
   signal(SIGPIPE, SIG_IGN);
+
+  if(curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+    fprintf(stderr, "curl_global_init failed\n");
+    return -1;
+  }
 
   mdns_discovery_start();
   ssdp_discovery_start();

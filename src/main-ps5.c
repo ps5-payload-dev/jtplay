@@ -23,6 +23,8 @@ along with this program; see the file COPYING. If not, see
 #include <sys/sysctl.h>
 #include <sys/syscall.h>
 
+#include <curl/curl.h>
+
 #include "mdns.h"
 #include "srv.h"
 #include "ssdp.h"
@@ -89,6 +91,12 @@ main(int argc, char** argv) {
   }
 
   setenv("CURL_CA_BUNDLE", "/user/app/"TITLE_ID"/ca-bundle.crt", 0);
+
+  if(curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+    fprintf(stderr, "curl_global_init failed\n");
+    return -1;
+  }
+
   while(1) {
     mdns_discovery_start();
     ssdp_discovery_start();
