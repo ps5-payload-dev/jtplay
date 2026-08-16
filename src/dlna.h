@@ -20,19 +20,23 @@ along with this program; see the file COPYING. If not, see
 
 
 /**
- * Start the SSDP service discovery.
+ * Start discovery of DLNA services on the local network.
  **/
-int ssdp_discovery_start(void);
+int dlna_discovery_start(void);
 
 
 /**
- * Stop the SSDP service discovery.
+ * Stop discovery of DLNA services on the local network.
  **/
-int ssdp_discovery_stop(void);
+int dlna_discovery_stop(void);
 
 
 /**
- * Respond to a SSDP discovery request.
+ * Respond to a request for the DLNA API.
+ *
+ * /dlna                       media servers found on the network
+ * /dlna/browse?udn=&id=       children of an object on one of them
+ * /dlna/metadata?udn=&id=     that object itself
  **/
-enum MHD_Result ssdp_request(struct MHD_Connection *conn,
+enum MHD_Result dlna_request(struct MHD_Connection *conn,
                              const char* url);

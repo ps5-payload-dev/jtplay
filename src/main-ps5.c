@@ -24,10 +24,11 @@ along with this program; see the file COPYING. If not, see
 #include <sys/syscall.h>
 
 #include <curl/curl.h>
+#include <libxml/parser.h>
 
 #include "mdns.h"
 #include "srv.h"
-#include "ssdp.h"
+#include "dlna.h"
 
 
 /**
@@ -90,8 +91,9 @@ main(int argc, char** argv) {
     sleep(1);
   }
 
-  setenv("CURL_CA_BUNDLE", "/user/app/"TITLE_ID"/ca-bundle.crt", 0);
+  xmlInitParser();
 
+  setenv("CURL_CA_BUNDLE", "/user/app/"TITLE_ID"/ca-bundle.crt", 0);
   if(curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
     fprintf(stderr, "curl_global_init failed\n");
     return -1;
@@ -99,14 +101,16 @@ main(int argc, char** argv) {
 
   while(1) {
     mdns_discovery_start();
-    ssdp_discovery_start();
+    dlna_discovery_start();
 
     srv_serve(port);
     sleep(3);
 
     mdns_discovery_stop();
-    ssdp_discovery_stop();
+    dlna_discovery_stop();
   }
+
+  xmlCleanupParser();
 
   return 0;
 }

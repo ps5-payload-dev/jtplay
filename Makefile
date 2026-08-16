@@ -27,14 +27,16 @@ CABUNDLE=$(PS5_PAYLOAD_SDK)/target/user/homebrew/etc/ca-bundle.crt
 
 CFLAGS := -Wall -Werror -DTITLE_ID="\"BREW10003\""
 CFLAGS += -DCABUNDLE="\"$(CABUNDLE)\""
+CFLAGS += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libxml-2.0 --cflags`
 
 SRCS := src/main-ps5.c src/srv.c src/mime.c src/asset.c src/mdns.c src/smb.c
-SRCS += src/http.c src/fs.c src/ssdp.c src/viz.c
+SRCS += src/http.c src/fs.c src/dlna.c src/viz.c
 
 LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libmicrohttpd --libs`
 LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config microdns --libs`
 LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libsmb2 --libs`
 LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libcurl --libs`
+LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libxml-2.0 --libs`
 LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libavcodec --libs`
 LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libavformat --libs`
 LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libswresample --libs`

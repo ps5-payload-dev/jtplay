@@ -17,14 +17,16 @@
 PYTHON := python3
 
 CFLAGS := -Wall -Werror
+CFLAGS += `pkg-config libxml-2.0 --cflags`
 
 SRCS := src/main-pc.c src/srv.c src/mime.c src/asset.c src/mdns.c src/smb.c
-SRCS += src/http.c src/ssdp.c src/fs.c src/viz.c
+SRCS += src/http.c src/dlna.c src/fs.c src/viz.c
 
 LDADD  += `pkg-config libmicrohttpd --libs`
 LDADD  += `pkg-config microdns --libs`
 LDADD  += `pkg-config libsmb2 --libs`
 LDADD  += `pkg-config libcurl --libs`
+LDADD  += `pkg-config libxml-2.0 --libs`
 LDADD  += `pkg-config libavcodec --libs`
 LDADD  += `pkg-config libavformat --libs`
 LDADD  += `pkg-config libswresample --libs`

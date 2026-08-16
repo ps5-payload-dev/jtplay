@@ -18,10 +18,11 @@ along with this program; see the file COPYING. If not, see
 #include <stdint.h>
 
 #include <curl/curl.h>
+#include <libxml/parser.h>
 
 #include "mdns.h"
 #include "srv.h"
-#include "ssdp.h"
+#include "dlna.h"
 
 
 int
@@ -30,18 +31,22 @@ main(int argc, char** argv) {
 
   signal(SIGPIPE, SIG_IGN);
 
+  xmlInitParser();
+
   if(curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
     fprintf(stderr, "curl_global_init failed\n");
     return -1;
   }
 
   mdns_discovery_start();
-  ssdp_discovery_start();
+  dlna_discovery_start();
 
   srv_serve(port);
 
   mdns_discovery_stop();
-  ssdp_discovery_stop();
+  dlna_discovery_stop();
+
+  xmlCleanupParser();
 
   return 0;
 }

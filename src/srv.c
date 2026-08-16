@@ -26,11 +26,11 @@ along with this program; see the file COPYING. If not, see
 #include <microhttpd.h>
 
 #include "asset.h"
+#include "dlna.h"
 #include "fs.h"
 #include "mdns.h"
 #include "http.h"
 #include "smb.h"
-#include "ssdp.h"
 #include "viz.h"
 
 
@@ -47,8 +47,8 @@ srv_on_request(void *cls, struct MHD_Connection *conn,
     if(!strcmp("/mdns", url)) {
       return mdns_request(conn, url);
     }
-    if(!strcmp("/ssdp", url)) {
-      return ssdp_request(conn, url);
+    if(!strncmp("/dlna", url, 5)) {
+      return dlna_request(conn, url);
     }
     if(!strncmp("/smb", url, 4)) {
       return smb_request(conn, url);
