@@ -30,7 +30,7 @@ CFLAGS += -DCABUNDLE="\"$(CABUNDLE)\""
 CFLAGS += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libxml-2.0 --cflags`
 
 SRCS := src/main-ps5.c src/srv.c src/mime.c src/asset.c src/mdns.c src/smb.c
-SRCS += src/http.c src/fs.c src/dlna.c src/viz.c
+SRCS += src/http.c src/fs.c src/dlna.c src/viz.c src/remux.c
 
 LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config libmicrohttpd --libs`
 LDADD  += `$(PS5_PAYLOAD_SDK)/bin/prospero-pkg-config microdns --libs`

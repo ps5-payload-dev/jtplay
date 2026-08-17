@@ -30,6 +30,7 @@ along with this program; see the file COPYING. If not, see
 #include "fs.h"
 #include "mdns.h"
 #include "http.h"
+#include "remux.h"
 #include "smb.h"
 #include "viz.h"
 
@@ -61,6 +62,9 @@ srv_on_request(void *cls, struct MHD_Connection *conn,
     }
     if(!strncmp("/viz", url, 4)) {
       return viz_request(conn, url);
+    }
+    if(!strncmp("/remux", url, 6)) {
+      return remux_request(conn, url);
     }
     if(!strcmp("/", url) || !url[0]) {
       return asset_request(conn, "/index.html");
